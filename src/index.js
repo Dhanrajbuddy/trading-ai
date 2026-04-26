@@ -15,6 +15,7 @@ const { sendAlert, sendMarketAlert }   = require('./alerts/telegramAlert');
 const { processSignal, getAutoTradeState } = require('./services/autoTrader');
 const { refreshIfStale, forceRefresh, getUniverseState } = require('./services/stockUniverse');
 const { marketStatusInfo }           = require('./utils/marketStatus');
+const { runBacktest }                = require('./backtest/backtestEngine');
 
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
@@ -227,6 +228,30 @@ app.get('/orders/auto', (_req, res) => {
 // GET /stocks/universe  — dynamic stock selection state
 app.get('/stocks/universe', (_req, res) => {
   res.json(getUniverseState());
+});
+
+// GET /backtest  — replay historical candles through the live strategy
+// Query params:
+//   symbol  (required) — NSE ticker, e.g. RELIANCE
+//   days    (optional) — lookback days, 1–60, default 7
+// Example: GET /backtest?symbol=RELIANCE&days=30
+app.get('/backtest', async (req, res) => {
+  const { symbol, days } = req.query;
+
+  if (!symbol || typeof symbol !== 'string' || !/^[A-Za-z0-9]+$/.test(symbol)) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Missing or invalid "symbol" query parameter. Example: /backtest?symbol=RELIANCE',
+    });
+  }
+
+  try {
+    const result = await runBacktest(symbol, days);
+    res.json(result);
+  } catch (err) {
+    console.error(`[Backtest] Error: ${err.message}`);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
 });
 
 // ─── Zerodha Auth Routes ──────────────────────────────────────────────────────
