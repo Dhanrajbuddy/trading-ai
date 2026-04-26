@@ -15,7 +15,8 @@ const { sendAlert, sendMarketAlert }   = require('./alerts/telegramAlert');
 const { processSignal, getAutoTradeState } = require('./services/autoTrader');
 const { refreshIfStale, forceRefresh, getUniverseState } = require('./services/stockUniverse');
 const { marketStatusInfo }           = require('./utils/marketStatus');
-const { runBacktest }                = require('./backtest/backtestEngine');
+const { runBacktest, runPortfolioBacktest } = require('./backtest/backtestEngine');
+const { log, getLogs, clearLogs }    = require('./services/logger');
 
 // ─── App Setup ────────────────────────────────────────────────────────────────
 
@@ -252,6 +253,63 @@ app.get('/backtest', async (req, res) => {
     console.error(`[Backtest] Error: ${err.message}`);
     res.status(500).json({ status: 'error', message: err.message });
   }
+});
+
+// GET /backtest/portfolio — run backtest across a default portfolio of 7 symbols
+// Query params:
+//   symbols  (optional) — comma-separated tickers, e.g. RELIANCE,TCS,INFY
+//   days     (optional) — lookback days, 1–60, default 7
+// Example: GET /backtest/portfolio?days=14
+// Example: GET /backtest/portfolio?symbols=RELIANCE,TCS&days=30
+app.get('/backtest/portfolio', async (req, res) => {
+  const { symbols, days } = req.query;
+
+  let tickers;
+  if (symbols) {
+    tickers = symbols.split(',')
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => /^[A-Z0-9]+$/.test(s));
+    if (tickers.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid "symbols" parameter. Example: ?symbols=RELIANCE,TCS,INFY',
+      });
+    }
+  }
+
+  try {
+    const result = await runPortfolioBacktest(tickers, days);
+    res.json(result);
+  } catch (err) {
+    console.error(`[Portfolio Backtest] Error: ${err.message}`);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// ─── Logger Routes ────────────────────────────────────────────────────────────
+
+app.get('/logs', (req, res) => {
+  const { type, limit } = req.query;
+  let entries = getLogs();
+  if (type) {
+    const t = type.toUpperCase();
+    entries = entries.filter((e) => e.type === t);
+  }
+  if (limit) {
+    const n = parseInt(limit, 10);
+    if (!isNaN(n) && n > 0) entries = entries.slice(-n);
+  }
+  res.json({ count: entries.length, logs: entries });
+});
+
+app.delete('/logs', (_req, res) => {
+  clearLogs();
+  res.json({ status: 'ok', message: 'Logs cleared' });
+});
+
+app.post('/logs/clear', (_req, res) => {
+  clearLogs();
+  res.json({ status: 'ok', message: 'Logs cleared' });
 });
 
 // ─── Zerodha Auth Routes ──────────────────────────────────────────────────────

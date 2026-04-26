@@ -30,3 +30,13 @@ export async function placeOrder(signal) {
 }
 
 export async function fetchOrderLog() { return get('/orders/log') }
+
+export async function fetchLogs(type) {
+  const qs = type ? `?type=${type}` : ''
+  return get(`/logs${qs}`)
+}
+
+export async function clearLogs() {
+  const res = await fetch(`${BASE}/logs/clear`, { method: 'POST' })
+  return res.json()
+}

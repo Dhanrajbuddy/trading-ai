@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { fetchStocks, fetchSignals, fetchTop, fetchHealth, triggerScan, placeOrder, fetchOrderLog } from './api.js'
+import { fetchStocks, fetchSignals, fetchTop, fetchHealth, triggerScan, placeOrder, fetchOrderLog, fetchLogs, clearLogs as apiClearLogs } from './api.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -516,7 +516,104 @@ function TopMovers({ gainers, losers }) {
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Signals', 'Orders', 'Stocks', 'Top Movers']
+// ─── Debug Logs Table ──────────────────────────────────────────────────────────
+
+const TYPE_STYLES = {
+  INFO:   'bg-blue-900/60 text-blue-300 border border-blue-700',
+  ERROR:  'bg-red-900/60 text-red-300 border border-red-700',
+  SIGNAL: 'bg-yellow-900/60 text-yellow-300 border border-yellow-700',
+  TRADE:  'bg-green-900/60 text-green-300 border border-green-700',
+}
+
+function LogTypeBadge({ type }) {
+  const cls = TYPE_STYLES[type] || 'bg-gray-700 text-gray-300 border border-gray-600'
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide ${cls}`}>
+      {type}
+    </span>
+  )
+}
+
+function DebugLogs({ logs, onClear }) {
+  const [filter, setFilter] = useState('ALL')
+  const types = ['ALL', 'INFO', 'ERROR', 'SIGNAL', 'TRADE']
+
+  const visible = filter === 'ALL' ? logs : logs.filter((l) => l.type === filter)
+
+  return (
+    <div className="space-y-3">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex gap-1 bg-gray-800 p-1 rounded-lg">
+          {types.map((t) => (
+            <button
+              key={t}
+              onClick={() => setFilter(t)}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                filter === t ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-500">{visible.length} entries</span>
+          <button
+            onClick={onClear}
+            className="bg-red-700 hover:bg-red-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Clear Logs
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      {visible.length === 0 ? (
+        <div className="text-center text-gray-500 py-16 text-sm">No logs yet. Logs appear during market hours.</div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-gray-800">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-800 text-gray-400 text-xs uppercase tracking-wide">
+                <th className="px-4 py-3 text-left whitespace-nowrap">Time</th>
+                <th className="px-4 py-3 text-left">Type</th>
+                <th className="px-4 py-3 text-left">Message</th>
+                <th className="px-4 py-3 text-left">Data</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-800">
+              {[...visible].reverse().map((entry, idx) => (
+                <tr key={idx} className="hover:bg-gray-800/50 transition-colors align-top">
+                  <td className="px-4 py-2.5 text-gray-400 whitespace-nowrap font-mono text-xs">
+                    {new Date(entry.time).toLocaleTimeString()}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <LogTypeBadge type={entry.type} />
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-200">{entry.message}</td>
+                  <td className="px-4 py-2.5">
+                    {entry.data ? (
+                      <pre className="text-xs text-gray-400 whitespace-pre-wrap break-all max-w-md font-mono">
+                        {JSON.stringify(entry.data, null, 2)}
+                      </pre>
+                    ) : (
+                      <span className="text-gray-600">—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────────
+
+const TABS = ['Signals', 'Orders', 'Stocks', 'Top Movers', 'Debug Logs']
 
 export default function App() {
   const [tab,          setTab]          = useState('Signals')
@@ -535,6 +632,8 @@ export default function App() {
   // Order log state
   const [orders,        setOrders]        = useState([])
   const [selectedOrder, setSelectedOrder] = useState(null)
+  // Debug logs state
+  const [debugLogs,     setDebugLogs]     = useState([])
 
   const refresh = useCallback(async () => {
     try {
@@ -566,6 +665,26 @@ export default function App() {
     const id = setInterval(refresh, 5_000)
     return () => clearInterval(id)
   }, [refresh])
+
+  // Poll debug logs every 3 seconds independently
+  useEffect(() => {
+    async function pollLogs() {
+      try {
+        const data = await fetchLogs()
+        setDebugLogs(data.logs || [])
+      } catch (_) {}
+    }
+    pollLogs()
+    const id = setInterval(pollLogs, 3_000)
+    return () => clearInterval(id)
+  }, [])
+
+  async function handleClearLogs() {
+    try {
+      await apiClearLogs()
+      setDebugLogs([])
+    } catch (_) {}
+  }
 
   async function handleScan() {
     setScanning(true)
@@ -673,6 +792,7 @@ export default function App() {
         {tab === 'Orders'     && <OrdersTable orders={orders} onSelectOrder={setSelectedOrder} />}
         {tab === 'Stocks'     && <StocksTable stocks={stocks} />}
         {tab === 'Top Movers' && <TopMovers gainers={top.gainers} losers={top.losers} />}
+        {tab === 'Debug Logs' && <DebugLogs logs={debugLogs} onClear={handleClearLogs} />}
       </main>
 
       {/* Order details modal */}

@@ -26,17 +26,20 @@
  */
 
 const { calculatePositionSize } = require('./riskManager');
+const { log }                   = require('../services/logger');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const MIN_CONFIDENCE    = 75;   // STRONG signals; NEUTRAL market allowed (slightly lower bar)
 const RSI_PERIOD        = 14;
+const EMA_PULLBACK_ZONE = 2.0;  // max % price may deviate from EMA20 before entry is overextended
 const PRICE_HISTORY_MAX = 60;   // rolling window per symbol
 const COOLDOWN_MS       = 15 * 60 * 1000;   // 15-minute repeat-signal block
 
 // Trading window (IST): 9:30 AM – 3:15 PM
 const WINDOW_START_MINS = 9 * 60 + 30;   // 570
 const WINDOW_END_MINS   = 15 * 60 + 15;  // 915
+const ENTRY_CUTOFF_MINS = 14 * 60 + 45;  // 885 — no new entry signals after 2:45 PM
 
 // ─── Per-run in-memory state ──────────────────────────────────────────────────
 
@@ -400,6 +403,15 @@ function generateSignals(stocks, scanData) {
     return [];
   }
 
+  // ── Entry cutoff — no new positions after 2:45 PM ────────────────────────
+  const _now     = new Date();
+  const _ist     = new Date(_now.getTime() + 5.5 * 60 * 60 * 1000);
+  const _nowMins = _ist.getUTCHours() * 60 + _ist.getUTCMinutes();
+  if (_nowMins >= ENTRY_CUTOFF_MINS) {
+    console.log('[SignalEngine] ⏰ Past 2:45 PM entry cutoff — no new entries to avoid overnight gap risk.');
+    return [];
+  }
+
   // ── Market trend (breadth) ────────────────────────────────────────────────
   const marketTrend = computeMarketTrend(stocks);
   console.log(`[SignalEngine] Market breadth: ${marketTrend}`);
@@ -417,17 +429,37 @@ function generateSignals(stocks, scanData) {
     updatePriceHistory(stock.symbol, stock.price, stock.prevClose);
     const rsi = computeRSI(_priceHistory[stock.symbol]);
 
-    // ── BUY gate: all 3 required ─────────────────────────────────────────────
+    // ── BUY gate: pullback-to-EMA strategy ──────────────────────────────────
+    // Overextension filter: if price is > EMA_PULLBACK_ZONE% from EMA20,
+    // the move is already extended — skip regardless of direction.
+    const emaDistPct = (ema20 !== null && ema20 > 0)
+      ? Math.abs((stock.price - ema20) / ema20) * 100
+      : 999;
+    if (emaDistPct > EMA_PULLBACK_ZONE) {
+      console.log(`[SignalEngine] ↔ ${stock.symbol} SKIP — price ${emaDistPct.toFixed(2)}% from EMA20 (overextended, limit ±${EMA_PULLBACK_ZONE}%)`);
+      log('SIGNAL', 'Signal rejected', {
+        symbol: stock.symbol,
+        reason: `overextended ${emaDistPct.toFixed(2)}% from EMA20 (limit ±${EMA_PULLBACK_ZONE}%)`,
+      });
+      continue;
+    }
+
+    // BUY: price above EMA20 but near it (trend up, pulling back to EMA),
+    //      RSI confirms bullish momentum, day candle is bullish.
     const priceAboveEMA  = ema20 !== null && stock.price > ema20;
     const hasVolumeSpike = spikeSymbols.has(stock.symbol);     // vMult ≥ 1.5
-    const hasBreakout    = breakoutSymbols.has(stock.symbol);  // price ≥ dayHigh×0.995
+    const rsiAbove50     = rsi !== null && rsi > 50;
+    const bullishCandle  = stock.open != null && stock.price > stock.open;  // price above day open
 
-    // ── SELL gate: both required ──────────────────────────────────────────────
+    // ── SELL gate: pullback-to-EMA strategy ─────────────────────────────────
+    // SELL: price below EMA20 but near it (trend down, rallying back to EMA),
+    //       RSI confirms bearish momentum, day candle is bearish.
     const priceBelowEMA  = ema20 !== null && stock.price < ema20;
-    const negativeMoment = stock.changePercent < -1;
+    const rsiBelow50     = rsi !== null && rsi < 50;
+    const bearishCandle  = stock.open != null && stock.price < stock.open;  // price below day open
 
-    const isBuy  = priceAboveEMA && hasVolumeSpike && hasBreakout;
-    const isSell = priceBelowEMA && negativeMoment;
+    const isBuy  = priceAboveEMA && rsiAbove50 && bullishCandle && hasVolumeSpike;
+    const isSell = priceBelowEMA && rsiBelow50 && bearishCandle && hasVolumeSpike;
 
     if (!isBuy && !isSell) continue;
 
@@ -435,10 +467,12 @@ function generateSignals(stocks, scanData) {
     // Block directly opposed trades; NEUTRAL allows both BUY and SELL (lower score)
     if (isBuy  && marketTrend === 'BEARISH') {
       console.log(`[SignalEngine] ⛔ ${stock.symbol} BUY blocked — market is BEARISH`);
+      log('SIGNAL', 'Signal rejected', { symbol: stock.symbol, action: 'BUY', reason: 'market trend BEARISH (hard block)' });
       continue;
     }
     if (isSell && marketTrend === 'BULLISH') {
       console.log(`[SignalEngine] ⛔ ${stock.symbol} SELL blocked — market is BULLISH`);
+      log('SIGNAL', 'Signal rejected', { symbol: stock.symbol, action: 'SELL', reason: 'market trend BULLISH (hard block)' });
       continue;
     }
 
@@ -446,6 +480,7 @@ function generateSignals(stocks, scanData) {
     if (isOnCooldown(stock.symbol)) {
       const minsLeft = Math.ceil((COOLDOWN_MS - (Date.now() - _lastSignalTime[stock.symbol])) / 60_000);
       console.log(`[SignalEngine] ⏱  ${stock.symbol} on 15-min cooldown (${minsLeft} min remaining)`);
+      log('SIGNAL', 'Signal rejected', { symbol: stock.symbol, reason: `cooldown (${minsLeft} min remaining)` });
       continue;
     }
 
@@ -462,6 +497,13 @@ function generateSignals(stocks, scanData) {
         `score=${score}/${MIN_CONFIDENCE} | ` +
         `missed: ${missed.length ? missed.join(', ') : 'none'}`
       );
+      log('SIGNAL', 'Signal rejected', {
+        symbol:  stock.symbol,
+        action,
+        score,
+        threshold: MIN_CONFIDENCE,
+        reason:  missed.length ? missed.join('; ') : 'score below threshold',
+      });
       continue;
     }
 
@@ -484,17 +526,29 @@ function generateSignals(stocks, scanData) {
     // ── Build human-readable reasons ──────────────────────────────────────────
     const baseReasons = isBuy
       ? [
-          `Price ${stock.price} > EMA20 ${ema20?.toFixed(2) ?? 'N/A'} (bullish trend)`,
-          `Volume spike ${stock.volumeMultiplier.toFixed(1)}x average`,
-          'Breakout above day high',
-          `VWAP breakout: ${vwapSymbols.has(stock.symbol) ? 'yes' : 'no'}`,
+          `Price ${stock.price} > EMA20 ${ema20?.toFixed(2) ?? 'N/A'} (trend up, pullback near EMA)`,
+          `EMA distance ${emaDistPct.toFixed(2)}% ≤ ${EMA_PULLBACK_ZONE}% (not overextended)`,
+          `Bullish candle: price ${stock.price} > day open ${stock.open}`,
+          `Volume spike ${stock.volumeMultiplier?.toFixed(1) ?? 'N/A'}x average`,
         ]
       : [
-          `Price ${stock.price} < EMA20 ${ema20?.toFixed(2) ?? 'N/A'} (bearish trend)`,
-          `Negative momentum: ${stock.changePercent.toFixed(2)}%`,
+          `Price ${stock.price} < EMA20 ${ema20?.toFixed(2) ?? 'N/A'} (trend down, rally near EMA)`,
+          `EMA distance ${emaDistPct.toFixed(2)}% ≤ ${EMA_PULLBACK_ZONE}% (not overextended)`,
+          `Bearish candle: price ${stock.price} < day open ${stock.open}`,
         ];
 
     console.log(`[SignalEngine] ✅ ${action} ${stock.symbol} — score ${score}/100 | RSI ${rsi ?? 'N/A'} | SL: ₹${sl} (${slType})`);
+
+    log('SIGNAL', 'Signal generated', {
+      symbol:      stock.symbol,
+      action,
+      score,
+      rsi:         rsi ?? null,
+      marketTrend,
+      price:       stock.price,
+      stopLoss:    sl,
+      target,
+    });
 
     signals.push({
       symbol:           stock.symbol,
