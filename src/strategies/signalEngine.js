@@ -39,7 +39,7 @@ const COOLDOWN_MS       = 15 * 60 * 1000;   // 15-minute repeat-signal block
 // Trading window (IST): 9:30 AM – 3:15 PM
 const WINDOW_START_MINS = 9 * 60 + 30;   // 570
 const WINDOW_END_MINS   = 15 * 60 + 15;  // 915
-const ENTRY_CUTOFF_MINS = 14 * 60 + 45;  // 885 — no new entry signals after 2:45 PM
+// Swing trading: no entry cutoff — signals allowed throughout market hours.
 
 // ─── Per-run in-memory state ──────────────────────────────────────────────────
 
@@ -400,15 +400,6 @@ function generateSignals(stocks, scanData) {
   // ── Time gate ─────────────────────────────────────────────────────────────
   if (!isWithinTradingWindow()) {
     console.log('[SignalEngine] ⏰ Outside trading window (9:30–15:15 IST). No signals generated.');
-    return [];
-  }
-
-  // ── Entry cutoff — no new positions after 2:45 PM ────────────────────────
-  const _now     = new Date();
-  const _ist     = new Date(_now.getTime() + 5.5 * 60 * 60 * 1000);
-  const _nowMins = _ist.getUTCHours() * 60 + _ist.getUTCMinutes();
-  if (_nowMins >= ENTRY_CUTOFF_MINS) {
-    console.log('[SignalEngine] ⏰ Past 2:45 PM entry cutoff — no new entries to avoid overnight gap risk.');
     return [];
   }
 

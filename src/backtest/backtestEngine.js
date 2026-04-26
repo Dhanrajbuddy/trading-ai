@@ -77,23 +77,20 @@ const INSTRUMENT_TOKENS = {
 
 // ─── Strategy Config (must mirror signalEngine.js) ───────────────────────────
 
-const MIN_CONFIDENCE       = 70;  // raised from 60 — rejects low-conviction setups; live engine uses 75
+const MIN_CONFIDENCE       = 65;  // relaxed from 70 — allows more high-quality setups through; live uses 75
 const MIN_RISK_PERCENT     = 0.5; // minimum SL distance as % of entry price
-const EMA_PULLBACK_ZONE    = 2.0; // max % price may deviate from EMA20 before entry is overextended
-const MIN_RR_RATIO         = 1.2; // minimum reward-to-risk ratio required to enter a trade
+const EMA_PULLBACK_ZONE    = 3.0; // max % price may deviate from EMA20 before entry is overextended
+const MIN_RR_RATIO         = 2.0; // swing trading: require 2R minimum reward (target = 3R, trail exits at 2R+)
+const MIN_MOVE_PCT         = 1.0; // skip trade if SL distance < 1.0% of price (too tight for costs)
 const DAILY_RISK_LIMIT_PCT = 2.0; // stop trading if cumulative day loss >= 2% of capital
-const TRADE_TIMEOUT_CANDLES = 50; // exit a trade that hasn't hit SL or target after N candles (~4 h)
-const OVERNIGHT_FIRST_HOUR  = 12; // 12 × 5-min = 60 min; exit if no momentum in first hour next day
+// Swing trading: no timeout — exits happen only on SL, target, or trailing SL.
 const RSI_PERIOD        = 14;
 const EMA_PERIOD        = 20;
 const EMA_TREND_PERIOD  = 50;  // longer EMA used as market regime proxy
 const COOLDOWN_CANDLES  = 3;   // 3 × 5-min = 15 min
 const WINDOW_START_MINS = 9  * 60 + 30;  // 570
 const WINDOW_END_MINS   = 15 * 60 + 15;  // 915 — overall candle window (for VWAP/indicators)
-const ENTRY_CUTOFF_MINS = 14 * 60 + 45;  // 885 — no NEW entries after 2:45 PM (avoid gap risk)
-const CLOSE_WEAK_MINS   = 15 * 60 +  0;  // 900 — close weak trades at 3:00 PM (< 1R profit)
-// Strong trades (≥ 1R MFE, SL at break-even or trailing) are allowed to hold overnight.
-// The existing gap-check and first-hour-momentum exit manage the next-day risk.
+// Swing trading: no entry cutoff, no forced close — entries allowed any time during market hours.
 const CAPITAL           = parseFloat(process.env.CAPITAL)  || 100_000;
 const RISK_PERCENT      = parseFloat(process.env.RISK_PERCENT) || 1;
 
@@ -600,18 +597,19 @@ function replayCandles(candles, symbol) {
 
       // ── Trailing SL ──────────────────────────────────────────────────────
       // +1R  → move SL to entry (break-even; eliminate max loss)
-      // +1.5R → trail SL using ATR from best price (lock in profits)
-      if (favorPts >= 1.5 * initialRisk) {
+      // +2R  → start trailing SL using ATR×2 from best price (lock in profits)
+      //         Wider trail gives swing trades room to breathe across sessions.
+      if (favorPts >= 2 * initialRisk) {
         if (action === 'BUY') {
-          const trailSL = parseFloat((openTrade.bestPrice - candleAtr).toFixed(2));
+          const trailSL = parseFloat((openTrade.bestPrice - candleAtr * 2).toFixed(2));
           if (trailSL > openTrade.sl) {
-            console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} TRAIL-SL  BUY ${openTrade.sl}→${trailSL} (MFE+1.5R)`);
+            console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} TRAIL-SL  BUY ${openTrade.sl}→${trailSL} (MFE+2R, trail=ATR×2)`);
             openTrade.sl = trailSL;
           }
         } else {
-          const trailSL = parseFloat((openTrade.bestPrice + candleAtr).toFixed(2));
+          const trailSL = parseFloat((openTrade.bestPrice + candleAtr * 2).toFixed(2));
           if (trailSL < openTrade.sl) {
-            console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} TRAIL-SL  SELL ${openTrade.sl}→${trailSL} (MFE+1.5R)`);
+            console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} TRAIL-SL  SELL ${openTrade.sl}→${trailSL} (MFE+2R, trail=ATR×2)`);
             openTrade.sl = trailSL;
           }
         }
@@ -623,107 +621,6 @@ function replayCandles(candles, symbol) {
           console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} BREAK-EVEN  SELL sl ${openTrade.sl}→${entry} (MFE+1R)`);
           openTrade.sl = parseFloat(entry.toFixed(2));
         }
-      }
-
-      // ── End-of-day selective close (3:00 PM) ────────────────────────────
-      // WEAK trade (MFE < 1R): close now — the trend hasn't confirmed.
-      //   Avoids overnight gap risk on positions that haven't moved in our favour.
-      // STRONG trade (MFE ≥ 1R, SL at break-even or trailing): let it run.
-      //   The gap-check on next-day open and first-hour-momentum exit handle risk.
-      if (candleMins >= CLOSE_WEAK_MINS && favorPts < initialRisk) {
-        const exitPrice   = close;
-        const grossProfit = action === 'BUY'
-          ? (exitPrice - entry) * qty
-          : (entry - exitPrice) * qty;
-        const cost      = calcTradingCosts(action, entry, exitPrice, qty);
-        const netProfit = parseFloat((grossProfit - cost).toFixed(2));
-        if (netProfit < 0) dailyLoss += Math.abs(netProfit);
-        console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} WEAK-CLOSE  ${action} closed at 3:00 PM (MFE=${favorPts.toFixed(2)} < 1R=${initialRisk.toFixed(2)})`);
-        trades.push({
-          symbol, action,
-          entry:       parseFloat(entry.toFixed(2)),
-          exit:        parseFloat(exitPrice.toFixed(2)),
-          stopLoss:    parseFloat(openTrade.sl.toFixed(2)),
-          target:      parseFloat(target.toFixed(2)),
-          qty,
-          grossProfit: parseFloat(grossProfit.toFixed(2)),
-          tradingCost: cost,
-          profit:      netProfit,
-          riskAmount:  parseFloat((initialRisk * qty).toFixed(2)),
-          result:      netProfit >= 0 ? 'WIN' : 'LOSS',
-          entryTime:   entryTs,
-          exitTime:    ts,
-          holdCandles: i - entryIdx,
-          note:        'weak close 3:00 PM — MFE < 1R, no overnight carry',
-        });
-        openTrade = null;
-        continue;
-      }
-
-      // ── Overnight first-hour momentum check ──────────────────────────────
-      // Trade carried overnight → exit in first hour if price hasn't moved
-      // at least 0.2R in favour (momentum absent, risk not worth holding).
-      if (overnightCheckStartIdx !== null &&
-          (i - overnightCheckStartIdx) >= OVERNIGHT_FIRST_HOUR &&
-          favorPts < 0.2 * initialRisk) {
-        const exitPrice  = close;
-        const grossProfit = action === 'BUY'
-          ? (exitPrice - entry) * qty
-          : (entry - exitPrice) * qty;
-        const cost       = calcTradingCosts(action, entry, exitPrice, qty);
-        const netProfit  = parseFloat((grossProfit - cost).toFixed(2));
-        if (netProfit < 0) dailyLoss += Math.abs(netProfit);
-        console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} OVERNIGHT-EXIT  ${action} no momentum in first hour (favorPts=${favorPts.toFixed(2)})`);
-        trades.push({
-          symbol, action,
-          entry:       parseFloat(entry.toFixed(2)),
-          exit:        parseFloat(exitPrice.toFixed(2)),
-          stopLoss:    parseFloat(openTrade.sl.toFixed(2)),
-          target:      parseFloat(target.toFixed(2)),
-          qty,
-          grossProfit: parseFloat(grossProfit.toFixed(2)),
-          tradingCost: cost,
-          profit:      netProfit,
-          riskAmount:  parseFloat((initialRisk * qty).toFixed(2)),
-          result:      netProfit >= 0 ? 'WIN' : 'LOSS',
-          entryTime:   entryTs,
-          exitTime:    ts,
-          holdCandles: i - entryIdx,
-          note:        'overnight — no first-hour momentum',
-        });
-        openTrade = null;
-        continue;
-      }
-
-      // ── Timeout: close after TRADE_TIMEOUT_CANDLES with no SL/target hit ─
-      if (i - entryIdx >= TRADE_TIMEOUT_CANDLES) {
-        const exitPrice  = close;
-        const grossProfit = action === 'BUY'
-          ? (exitPrice - entry) * qty
-          : (entry - exitPrice) * qty;
-        const cost      = calcTradingCosts(action, entry, exitPrice, qty);
-        const netProfit = parseFloat((grossProfit - cost).toFixed(2));
-        if (netProfit < 0) dailyLoss += Math.abs(netProfit);
-        console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} TIMEOUT  ${action} closed after ${TRADE_TIMEOUT_CANDLES} candles`);
-        trades.push({
-          symbol, action,
-          entry:       parseFloat(entry.toFixed(2)),
-          exit:        parseFloat(exitPrice.toFixed(2)),
-          stopLoss:    parseFloat(openTrade.sl.toFixed(2)),
-          target:      parseFloat(target.toFixed(2)),
-          qty,
-          grossProfit: parseFloat(grossProfit.toFixed(2)),
-          tradingCost: cost,
-          profit:      netProfit,
-          riskAmount:  parseFloat((initialRisk * qty).toFixed(2)),
-          result:      netProfit >= 0 ? 'WIN' : 'LOSS',
-          entryTime:   entryTs,
-          exitTime:    ts,
-          holdCandles: i - entryIdx,
-          note:        `timeout — ${TRADE_TIMEOUT_CANDLES} candles`,
-        });
-        openTrade = null;
-        continue;
       }
 
       // ── SL / target check (uses live sl which may be trailed) ────────────
@@ -828,11 +725,6 @@ function replayCandles(candles, symbol) {
     // ── Trading window gate ──────────────────────────────────────────────────
     if (!isWithinWindow(ts)) continue;
 
-    // ── Entry cutoff — no new trades after 2:45 PM ───────────────────────────
-    // Avoids entering positions too late in the day that would be forced to
-    // carry overnight, incurring gap risk.
-    if (candleMins >= ENTRY_CUTOFF_MINS) continue;
-
     // ── Overextension filter — skip if price is > EMA_PULLBACK_ZONE% from EMA20 ─
     // Avoids late entries where the move is already exhausted.
     const emaDistPct = ema20 > 0 ? Math.abs((close - ema20) / ema20) * 100 : 999;
@@ -918,12 +810,24 @@ function replayCandles(candles, symbol) {
     // ── Dynamic SL (ATR×1; swing SL removed to avoid noise stop-outs) ─────────
     const atr   = Math.max(dayRange, close * 0.01);
     const sl    = dynamicSL(action, close, atr);
-
-    // ── Target (ATR×1.2) ────────────────────────────────────────────────
     const slDist = Math.abs(close - sl);
+
+    // ── Minimum move filter (1.5% of price) ──────────────────────────────────
+    // If ATR is tiny, trading costs will eat any realistic profit.
+    // Require SL distance >= 1.5% of price — ensures the expected swing is
+    // large enough to overcome slippage + brokerage + STT + exchange fees.
+    const minMoveDist = close * (MIN_MOVE_PCT / 100);
+    if (slDist < minMoveDist) {
+      console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} ${action} SKIP  move=${((slDist/close)*100).toFixed(2)}% < ${MIN_MOVE_PCT}% min-move (too tight for costs)`);
+      continue;
+    }
+
+    // ── Target (3R cap; ATR×2 trailing SL is the primary exit for winners) ──
+    // A 3R hard cap ensures we model realistic multi-day swing exits while the
+    // trailing SL locks profits before the cap is usually reached.
     const target = action === 'BUY'
-      ? parseFloat((close + slDist * 1.2).toFixed(2))
-      : parseFloat((close - slDist * 1.2).toFixed(2));
+      ? parseFloat((close + slDist * 3).toFixed(2))
+      : parseFloat((close - slDist * 3).toFixed(2));
 
     // ── Minimum R:R filter ────────────────────────────────────────────
     // Reward must be at least MIN_RR_RATIO × risk; skip otherwise.
