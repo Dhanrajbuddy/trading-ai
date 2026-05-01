@@ -10,6 +10,25 @@ const TelegramBot = require('node-telegram-bot-api');
 let bot = null;
 let _marketClosedAlertSent = false;
 
+/**
+ * Format a Date (or timestamp ms) as a human-readable IST string.
+ * e.g. "01 May 2026, 14:35:22 IST"
+ * @param {Date|number} d
+ * @returns {string}
+ */
+function toIST(d) {
+  return new Date(d).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).replace(',', '') + ' IST';
+}
+
 function getBot() {
   if (!bot && process.env.TELEGRAM_TOKEN) {
     bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: false });
@@ -41,7 +60,7 @@ function formatMessage(signal, analysis) {
     `💬 _${analysis.reasoning}_\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `📋 Reasons:\n${signal.reasons.map((r) => `  • ${r}`).join('\n')}\n` +
-    `⏰ ${new Date(signal.timestamp).toUTCString()}`
+    `⏰ ${toIST(signal.timestamp)}`
   );
 }
 
