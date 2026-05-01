@@ -8,6 +8,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 
 let bot = null;
+let _marketClosedAlertSent = false;
 
 function getBot() {
   if (!bot && process.env.TELEGRAM_TOKEN) {
@@ -189,24 +190,24 @@ async function sendOcoAlert(event, trade) {
 
   const text = event === 'target'
     ? (
-      `🎯 *TARGET HIT*\n` +
+      `🟢 *PROFIT BOOKED*\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📌 Stock:   *${sym}*\n` +
       `🔢 Qty:     ${qty}\n` +
       `💵 Entry:   ₹${trade.entry ?? '—'}\n` +
       `🎯 Target:  ₹${trade.target ?? '—'}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `✅ *Profit booked!* Stop Loss order cancelled.`
+      `✅ Profit booked! Stop Loss order cancelled.`
     )
     : (
-      `🛑 *STOP LOSS HIT*\n` +
+      `🔴 *LOSS HIT*\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📌 Stock:   *${sym}*\n` +
       `🔢 Qty:     ${qty}\n` +
       `💵 Entry:   ₹${trade.entry ?? '—'}\n` +
       `🛑 SL:      ₹${trade.stopLoss ?? '—'}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🔒 *Loss controlled.* Target order cancelled.`
+      `🔒 Loss controlled. Target order cancelled.`
     );
 
   try {
@@ -272,4 +273,131 @@ async function sendAutoTradeAlert(signal, result) {
   }
 }
 
-module.exports = { sendAlert, sendOrderAlert, sendMarketAlert, sendOcoAlert, sendAutoTradeAlert };
+/**
+ * Send a daily P&L summary at market close.
+ * @param {{ date: string, trades: number, wins: number, losses: number, profit: number, costs: number, net: number, winRate: number }} summary
+ */
+async function sendDailySummary(summary) {
+  const instance = getBot();
+  const chatId   = process.env.CHAT_ID;
+
+  if (!instance || !chatId) {
+    console.log('[Telegram] Not configured — skipping daily summary');
+    return;
+  }
+
+  const { date, trades, wins, losses, profit, costs, net, winRate } = summary;
+  const netEmoji = net >= 0 ? '🟢' : '🔴';
+
+  const text =
+    `📊 *DAILY SUMMARY*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📅 Date: ${date}\n` +
+    `📈 Trades: ${trades}\n` +
+    `✅ Wins: ${wins}\n` +
+    `❌ Losses: ${losses}\n` +
+    `💰 Gross Profit: ₹${profit}\n` +
+    `💸 Costs: ₹${costs}\n` +
+    `${netEmoji} Net: ₹${net}\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📉 Win Rate: ${winRate}%`;
+
+  try {
+    await instance.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+    console.log('[Telegram] Daily summary sent.');
+  } catch (err) {
+    console.error(`[Telegram] Failed to send daily summary: ${err.message}`);
+  }
+}
+
+/**
+ * Send an alert when a trade is skipped due to filter rejection.
+ * @param {string} reason
+ * @param {{ symbol: string, action: string }} signal
+ */
+async function sendSkipAlert(reason, signal) {
+  const instance = getBot();
+  const chatId   = process.env.CHAT_ID;
+
+  if (!instance || !chatId) return;
+
+  const text =
+    `⚠️ *TRADE SKIPPED*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📌 Stock: ${signal.symbol ?? '—'}\n` +
+    `📋 Type: ${signal.action ?? '—'}\n` +
+    `❗ Reason: ${reason}`;
+
+  try {
+    await instance.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+    console.log(`[Telegram] Skip alert sent for ${signal.symbol ?? '—'} — ${reason}`);
+  } catch (err) {
+    console.error(`[Telegram] Failed to send skip alert: ${err.message}`);
+  }
+}
+
+/**
+ * Send a one-time alert when a trade is attempted outside market hours.
+ * Resets automatically at the start of each new calendar day.
+ */
+async function sendMarketClosedAlert() {
+  // Reset flag each calendar day
+  const today = new Date().toDateString();
+  if (_marketClosedAlertSent === today) return;
+  _marketClosedAlertSent = today;
+
+  const instance = getBot();
+  const chatId   = process.env.CHAT_ID;
+
+  if (!instance || !chatId) return;
+
+  const text =
+    `⛔ *MARKET CLOSED*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `No trades executed.\n` +
+    `Market hours: 09:15 – 15:30 IST`;
+
+  try {
+    await instance.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+    console.log('[Telegram] Market closed alert sent.');
+  } catch (err) {
+    console.error(`[Telegram] Failed to send market closed alert: ${err.message}`);
+  }
+}
+
+/**
+ * Send an error alert without crashing the system.
+ * @param {Error|string} error
+ */
+async function sendErrorAlert(error) {
+  const instance = getBot();
+  const chatId   = process.env.CHAT_ID;
+
+  if (!instance || !chatId) return;
+
+  const message = (error && error.message) ? error.message : String(error);
+
+  const text =
+    `🚨 *SYSTEM ERROR*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `${message}`;
+
+  try {
+    await instance.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+    console.log('[Telegram] Error alert sent.');
+  } catch (err) {
+    console.error(`[Telegram] Failed to send error alert: ${err.message}`);
+  }
+}
+
+module.exports = {
+  sendAlert,
+  sendOrderAlert,
+  sendMarketAlert,
+  sendOcoAlert,
+  sendAutoTradeAlert,
+  sendDailySummary,
+  sendSkipAlert,
+  sendMarketClosedAlert,
+  sendErrorAlert,
+};
