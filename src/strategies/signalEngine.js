@@ -195,7 +195,11 @@ function generateSignals(stocks, scanData) {
   const { volumeSpikes } = scanData;
 
   if (!isWithinTradingWindow()) {
-    console.log('[SignalEngine] Outside trading window (9:30–12:30 IST). No signals.');
+    const ist  = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+    const day  = ist.getUTCDay();
+    const reason = (day === 0 || day === 6) ? 'Weekend — market closed' : 'Outside trading window (9:30–12:30 IST)';
+    console.log(`[SignalEngine] ${reason}. No signals.`);
+    log('INFO', `⛔ Market Closed — ${reason}. No signals generated.`);
     sendMarketClosedAlert();
     return [];
   }
