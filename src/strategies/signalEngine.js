@@ -13,6 +13,7 @@
  */
 
 const { log } = require('../services/logger');
+const { sendMarketClosedAlert } = require('../alerts/telegramAlert');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,8 @@ const _pendingSignal  = {};  // symbol → { action, signalPrice, score } awaiti
 
 function isWithinTradingWindow() {
   const ist  = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  const day  = ist.getUTCDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return false;
   const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
   return mins >= WINDOW_START_MINS && mins <= ENTRY_CUTOFF_MINS;
 }
@@ -193,6 +196,7 @@ function generateSignals(stocks, scanData) {
 
   if (!isWithinTradingWindow()) {
     console.log('[SignalEngine] Outside trading window (9:30–12:30 IST). No signals.');
+    sendMarketClosedAlert();
     return [];
   }
 
