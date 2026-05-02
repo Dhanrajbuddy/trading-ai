@@ -2,6 +2,27 @@
 
 require('dotenv').config();
 
+// ─── Pipe console.log / console.error into the in-memory debug log ────────────
+// Must run before any other require so all modules benefit automatically.
+const { log: _log } = require('./services/logger');
+
+const _origLog   = console.log.bind(console);
+const _origError = console.error.bind(console);
+const _origWarn  = console.warn.bind(console);
+
+console.log = (...args) => {
+  _origLog(...args);
+  _log('INFO', args.map(String).join(' '));
+};
+console.error = (...args) => {
+  _origError(...args);
+  _log('ERROR', args.map(String).join(' '));
+};
+console.warn = (...args) => {
+  _origWarn(...args);
+  _log('INFO', args.map(String).join(' '));
+};
+
 const express = require('express');
 const cron    = require('node-cron');
 
