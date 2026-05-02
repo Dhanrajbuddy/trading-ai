@@ -508,7 +508,7 @@ function replayCandles(candles, symbol) {
     const score  = scoreSignal(action, rsi, volumeMultiplier, close, vwap ? parseFloat(vwap.toFixed(2)) : null);
 
     if (score < MIN_CONFIDENCE) {
-      console.log('REJECT:', { symbol, reason: 'low-score', score, minRequired: MIN_CONFIDENCE, volumeMultiplier, rsi: rsi?.toFixed(1), ema20: ema20?.toFixed(2), close });
+      console.log(`[BT:${symbol}] rejected | reason=low-score | score=${score}/${MIN_CONFIDENCE} rsi=${rsi?.toFixed(1)} vm=${volumeMultiplier} close=₹${close}`);
       continue;
     }
 
@@ -529,7 +529,7 @@ function replayCandles(candles, symbol) {
     const expectedGross = Math.abs(target - close) * qty;
     const expectedCost  = calcTradingCosts(action, close, target, qty);
     if (expectedGross <= expectedCost) {
-      console.log('REJECT:', { symbol, reason: 'cost-too-high', expectedProfit: expectedGross.toFixed(0), expectedCost: expectedCost.toFixed(0), qty, score });
+      console.log(`[BT:${symbol}] rejected | reason=cost-too-high | profit=₹${expectedGross.toFixed(0)} cost=₹${expectedCost.toFixed(0)} qty=${qty}`);
       continue;
     }
 

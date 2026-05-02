@@ -64,7 +64,7 @@ let latestSignals = [];
 
 async function runPipeline() {
   const ts = new Date().toISOString();
-  console.log(`\n[${ts}] 🔍 Running market scan...`);
+  console.log(`[Pipeline] Running market scan... (${ts})`);
 
   // 1. Fetch market data (Zerodha or mock)
   const stocks = await getMarketData();
@@ -363,10 +363,7 @@ app.get('/zerodha/callback', async (req, res) => {
   try {
     const accessToken = await generateAccessToken(request_token);
 
-    console.log('\n' + '='.repeat(60));
-    console.log('  ✅ ZERODHA LOGIN SUCCESS');
-    console.log(`  ACCESS TOKEN: ${accessToken}`);
-    console.log('='.repeat(60) + '\n');
+    console.log(`[ZerodhaAuth] Login successful. Access token acquired.`);
 
     // Trigger immediate pipeline run using real Kite data
     runPipeline().catch((err) => console.error(`[Callback] Pipeline: ${err.message}`));
@@ -443,10 +440,6 @@ cron.schedule('* * * * *', async () => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log('╔══════════════════════════════════════════╗');
-  console.log('║   🤖 Algorithmic Trading AI v2.0         ║');
-  console.log('╚══════════════════════════════════════════╝');
-  console.log(`🚀 Backend  → http://localhost:${PORT}`);
-  console.log(`📡 /health  /stocks  /signals  /top  POST /scan\n`);
+  console.log(`[Server] Algorithmic Trading AI v2.0 started on port ${PORT}`);
   runPipeline().catch((err) => console.error(`[Startup] ${err.message}`));
 });

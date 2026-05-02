@@ -339,7 +339,7 @@ function generateSignals(stocks, scanData) {
     const expectedProfit = Math.abs(target - entry) * qty;
     const expectedCost   = calcTradingCosts(action, entry, target, qty);
     if (expectedProfit <= expectedCost) {
-      console.log('REJECT:', { symbol: stock.symbol, reason: 'cost-too-high', expectedProfit: expectedProfit.toFixed(0), expectedCost: expectedCost.toFixed(0), qty });
+      console.log(`[SignalEngine] ${stock.symbol} ${action} rejected | reason=cost-too-high | profit=₹${expectedProfit.toFixed(0)} cost=₹${expectedCost.toFixed(0)} qty=${qty}`);
       continue;
     }
 
