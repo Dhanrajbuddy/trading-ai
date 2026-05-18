@@ -428,8 +428,8 @@ cron.schedule('*/5 * * * * *', async () => {
   }
 });
 
-// Pipeline — every minute
-cron.schedule('* * * * *', async () => {
+// Pipeline — every 5 seconds
+cron.schedule('*/5 * * * * *', async () => {
   try {
     await runPipeline();
   } catch (err) {

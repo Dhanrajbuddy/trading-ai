@@ -27,9 +27,9 @@ const PRICE_HISTORY_MAX = 60;            // rolling window per symbol
 const COOLDOWN_MS       = 15 * 60 * 1000; // 15-minute repeat-signal block
 const MAX_TRADES_PER_DAY = 1;            // max signals per symbol per day
 
-// Trading window (IST): 9:30 AM – 2:30 PM (no new entries after 2:30 PM)
+// Trading window (IST): 9:30 AM – 3:15 PM (no new entries after 3:15 PM)
 const WINDOW_START_MINS  = 9 * 60 + 30;  // 570 = 9:30 AM
-const ENTRY_CUTOFF_MINS  = 12 * 60 + 30; // 750 = 12:30 PM
+const ENTRY_CUTOFF_MINS  = 15 * 60 + 15; // 915 = 3:15 PM
 
 // ─── Per-run in-memory state ──────────────────────────────────────────────────
 
@@ -197,7 +197,7 @@ function generateSignals(stocks, scanData) {
   if (!isWithinTradingWindow()) {
     const ist  = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
     const day  = ist.getUTCDay();
-    const reason = (day === 0 || day === 6) ? 'Weekend — market closed' : 'Outside trading window (9:30–12:30 IST)';
+    const reason = (day === 0 || day === 6) ? 'Weekend — market closed' : 'Outside trading window (9:30–15:15 IST)';
     console.log(`[SignalEngine] ${reason}. No signals.`);
     log('INFO', `⛔ Market Closed — ${reason}. No signals generated.`);
     sendMarketClosedAlert();

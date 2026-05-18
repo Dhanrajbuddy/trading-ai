@@ -92,7 +92,7 @@ async function processSignal(signal) {
 
     // ── Gate 2: Market session ──────────────────────────────────────────────
     if (!isMarketOpen()) {
-      skip(signal?.symbol, 'Market is closed (outside NSE 09:15–15:30 IST)');
+      skip(signal?.symbol, 'Market is closed (outside trading window 9:30–15:15 IST)');
       return;
     }
 

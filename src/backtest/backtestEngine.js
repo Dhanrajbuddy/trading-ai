@@ -81,7 +81,7 @@ const EMA_PERIOD         = 20;
 const COOLDOWN_CANDLES   = 3;     // 3 × 5-min = 15 min between signals
 
 const WINDOW_START_MINS  = 9 * 60 + 30;   // 570 = 9:30 AM IST
-const ENTRY_CUTOFF_MINS  = 12 * 60 + 30;  // 750 = 12:30 PM IST (no new entries after)
+const ENTRY_CUTOFF_MINS  = 15 * 60 + 15;  // 915 = 3:15 PM IST (no new entries after)
 const WINDOW_END_MINS    = 15 * 60 + 15;  // 915 = 3:15 PM IST
 const CLOSE_ALL_MINS     = 15 * 60 + 15;  // force-close ALL trades at 3:15 PM
 

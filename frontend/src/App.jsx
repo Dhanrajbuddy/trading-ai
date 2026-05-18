@@ -659,10 +659,10 @@ export default function App() {
     }
   }, [])
 
-  // Auto-refresh every 5 seconds
+  // Auto-refresh every 2 seconds
   useEffect(() => {
     refresh()
-    const id = setInterval(refresh, 5_000)
+    const id = setInterval(refresh, 2_000)
     return () => clearInterval(id)
   }, [refresh])
 
@@ -751,7 +751,7 @@ export default function App() {
             {error && (
               <span className="text-red-400 text-xs bg-red-950 px-3 py-1 rounded-lg">{error}</span>
             )}
-            <span className="text-xs text-gray-400 hidden sm:block">Auto-refresh 5s</span>
+            <span className="text-xs text-gray-400 hidden sm:block">Auto-refresh 2s</span>
             <button
               onClick={handleScan}
               disabled={scanning}

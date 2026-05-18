@@ -32,9 +32,9 @@ function toMinutes(h, m) {
   return h * 60 + m;
 }
 
-// NSE regular session boundaries (in minutes since midnight IST)
-const MARKET_OPEN_MINUTES  = toMinutes(9, 15);   // 09:15
-const MARKET_CLOSE_MINUTES = toMinutes(15, 30);  // 15:30
+// NSE trading window boundaries (in minutes since midnight IST)
+const MARKET_OPEN_MINUTES  = toMinutes(9, 30);   // 09:30
+const MARKET_CLOSE_MINUTES = toMinutes(15, 15);  // 15:15
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -72,13 +72,13 @@ function marketStatusInfo() {
   const minutes = toMinutes(ist.getUTCHours(), ist.getUTCMinutes());
 
   if (minutes < MARKET_OPEN_MINUTES) {
-    return { open: false, reason: 'Market has not opened yet (opens at 09:15 IST)' };
+    return { open: false, reason: 'Market has not opened yet (opens at 09:30 IST)' };
   }
   if (minutes >= MARKET_CLOSE_MINUTES) {
-    return { open: false, reason: 'Market is closed for the day (closed at 15:30 IST)' };
+    return { open: false, reason: 'Market is closed for the day (closed at 15:15 IST)' };
   }
 
-  return { open: true, reason: 'NSE regular session is active (09:15–15:30 IST)' };
+  return { open: true, reason: 'Market Open — Inside trading window (9:30–15:15 IST)' };
 }
 
 module.exports = { isMarketOpen, marketStatusInfo };
