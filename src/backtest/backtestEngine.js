@@ -70,20 +70,22 @@ const INSTRUMENT_TOKENS = {
 
 // ─── Strategy Config ──────────────────────────────────────────────────────────
 
-const MIN_CONFIDENCE     = 50;    // signal score threshold
+const MIN_CONFIDENCE     = 65;    // must match signalEngine.js — filters MEDIUM+ signals
 const VOLUME_SPIKE_MIN   = 1.5;   // minimum volume multiplier
 const SL_PCT             = 0.3;   // fixed stop loss: 0.3% from entry
 const TARGET_PCT         = 1.2;   // fixed target:    1.2% from entry
-const CAPITAL_PER_TRADE  = 20000; // fixed ₹20,000 capital per trade
-const MAX_TRADES_PER_DAY = 1;     // max trades per symbol per day
+// Capital per trade: 80% of configured capital (mirrors live engine cap)
+const CAPITAL            = parseFloat(process.env.CAPITAL) || 20_000;
+const CAPITAL_PER_TRADE  = Math.floor(CAPITAL * 0.80); // e.g. ₹16k on ₹20k capital
+const MAX_TRADES_PER_DAY = 3;     // must match signalEngine.js MAX_TRADES_PER_DAY
 const RSI_PERIOD         = 14;
 const EMA_PERIOD         = 20;
-const COOLDOWN_CANDLES   = 3;     // 3 × 5-min = 15 min between signals
+const COOLDOWN_CANDLES   = 2;     // 2 × 5-min = 10 min between signals (matches live COOLDOWN_MS)
 
 const WINDOW_START_MINS  = 9 * 60 + 30;   // 570 = 9:30 AM IST
-const ENTRY_CUTOFF_MINS  = 15 * 60 + 15;  // 915 = 3:15 PM IST (no new entries after)
-const WINDOW_END_MINS    = 15 * 60 + 15;  // 915 = 3:15 PM IST
-const CLOSE_ALL_MINS     = 15 * 60 + 15;  // force-close ALL trades at 3:15 PM
+const ENTRY_CUTOFF_MINS  = 15 * 60 + 0;   // 900 = 3:00 PM IST (matches live ENTRY_CUTOFF_MINS)
+const WINDOW_END_MINS    = 15 * 60 + 0;   // 900 = 3:00 PM IST
+const CLOSE_ALL_MINS     = 15 * 60 + 15;  // 915 = 3:15 PM IST (Zerodha auto-squareoff time)
 
 // ─── Trading cost model (Zerodha NSE equity intraday) ────────────────────────
 

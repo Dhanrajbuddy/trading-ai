@@ -26,9 +26,11 @@ const TARGET_PCT        = 1.2;           // 1.2% fixed target → 4:1 R:R
 // Capital allocation — reads CAPITAL env var via riskManager (default ₹20,000 for testing)
 const MAX_CAPITAL_PER_TRADE_PCT = 0.80;  // deploy at most 80% of capital in a single trade
 const MAX_CAPITAL_DAILY_MULT    = 2.5;   // total daily budget = capital × 2.5 (MIS leverage headroom)
-const PRICE_HISTORY_MAX = 60;            // rolling window per symbol
-const COOLDOWN_MS       = 10 * 60 * 1000; // 10-minute repeat-signal block (reduced from 15)
-const MAX_TRADES_PER_DAY = 3;            // max signals per symbol per day (increased from 1)
+const MAX_DAILY_RISK_PCT        = 0.015; // stop signalling if daily SL exposure > 1.5% of capital
+const CANDLE_MINS               = 5;     // 5-minute candles — matches backtestEngine
+const MIN_CLOSED_CANDLES        = 14;    // need 14 closed candles (70 min) before RSI is reliable
+const COOLDOWN_MS               = 10 * 60 * 1000; // 10-minute repeat-signal block
+const MAX_TRADES_PER_DAY        = 3;     // max signals per symbol per day
 
 // Trading window (IST): 9:30 AM – 3:00 PM (cutoff at 3 PM for safe fills)
 const WINDOW_START_MINS  = 9 * 60 + 30;  // 570 = 9:30 AM
@@ -41,11 +43,11 @@ const _lastSignalTime = {};  // symbol → epoch ms
 const _tradesToday    = {};  // symbol → { date: 'YYYY-MM-DD', count: number }
 const _prevCandle     = {};  // symbol → { high, low } from previous scan cycle
 const _pendingSignal  = {};  // symbol → { action, signalPrice, score } awaiting next-scan confirmation
-const _tickCount      = {};  // symbol → number of real LTP ticks observed (warmup guard)
-const _capitalState   = { date: '', committed: 0 }; // total ₹ deployed in confirmed signals today
-
-// Minimum real LTP ticks before RSI is trusted (5s scan → 30 ticks = 2.5 min warmup per symbol)
-const WARMUP_TICKS = 30;
+const _capitalState   = { date: '', committed: 0 }; // total ₹ position value committed today
+const _dailyRisk      = { date: '', committed: 0 }; // total ₹ SL exposure committed today
+// 5-minute candle state — RSI is computed on closed candle closes (same as backtestEngine)
+const _candleState    = {};  // symbol → { windowMs, open, high, low, close }
+const _candleHistory  = {};  // symbol → number[] of closed candle closes (oldest-first, max 60)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -82,17 +84,77 @@ function isMaxTradesReached(symbol) {
   return rec && rec.date === today && rec.count >= MAX_TRADES_PER_DAY;
 }
 
-function updatePriceHistory(symbol, price, seedPrice) {
-  if (!_priceHistory[symbol]) {
-    const seed = seedPrice || price;
-    _priceHistory[symbol] = new Array(RSI_PERIOD + 1).fill(seed);
-    _tickCount[symbol] = 0;
+// ─── 5-Minute Candle Builder ─────────────────────────────────────────────────
+//
+// Builds real OHLC candles from raw LTP ticks. When a new 5-minute window
+// starts, the previous candle's close is appended to _candleHistory.
+// RSI is then computed on those closed closes — identical data to what
+// backtestEngine uses from Zerodha's 5-min historical API.
+//
+function updateCandle(symbol, price) {
+  const windowMs = Math.floor(Date.now() / (CANDLE_MINS * 60_000)) * (CANDLE_MINS * 60_000);
+  const state    = _candleState[symbol];
+  if (!state || state.windowMs !== windowMs) {
+    if (state) {
+      // Close the previous candle
+      if (!_candleHistory[symbol]) _candleHistory[symbol] = [];
+      _candleHistory[symbol].push(state.close);
+      if (_candleHistory[symbol].length > 60) _candleHistory[symbol].shift();
+      const n = _candleHistory[symbol].length;
+      if (n <= MIN_CLOSED_CANDLES) {
+        console.log(`[SignalEngine] 📊 ${symbol} candle ${n}/${MIN_CLOSED_CANDLES} closed @ ₹${state.close}`);
+      }
+    }
+    _candleState[symbol] = { windowMs, open: price, high: price, low: price, close: price };
+  } else {
+    state.high  = Math.max(state.high, price);
+    state.low   = Math.min(state.low, price);
+    state.close = price;
   }
-  _priceHistory[symbol].push(price);
-  _tickCount[symbol] = (_tickCount[symbol] || 0) + 1;
-  if (_priceHistory[symbol].length > PRICE_HISTORY_MAX) {
-    _priceHistory[symbol].shift();
+}
+
+/**
+ * Compute RSI on closed 5-min candle closes. Includes the current
+ * (still-building) candle close for responsiveness.
+ * Returns null until MIN_CLOSED_CANDLES are available.
+ */
+function getCandleRSI(symbol) {
+  const closes  = _candleHistory[symbol] || [];
+  const current = _candleState[symbol];
+  const all     = current ? [...closes, current.close] : closes;
+  return computeRSI(all);
+}
+
+/** Returns true once 14 real candles have closed — RSI is now reliable. */
+function hasEnoughCandles(symbol) {
+  return (_candleHistory[symbol] || []).length >= MIN_CLOSED_CANDLES;
+}
+
+// ─── Daily Risk Limit ─────────────────────────────────────────────────────────
+//
+// Tracks cumulative SL exposure (₹ at risk) across all signals emitted today.
+// Risk per signal = |entry - stopLoss| × qty  (not position value).
+// New signals are blocked once daily budget is exhausted.
+// Budget = CAPITAL × 1.5%  →  ₹300 on ₹20k, ₹750 on ₹50k, ₹1,500 on ₹1L
+//
+function resetDailyRisk() {
+  const today = getTodayIST();
+  if (_dailyRisk.date !== today) {
+    _dailyRisk.date      = today;
+    _dailyRisk.committed = 0;
   }
+}
+
+function hasDailyRiskHeadroom(riskAmount) {
+  resetDailyRisk();
+  return (_dailyRisk.committed + riskAmount) <= getCapital() * MAX_DAILY_RISK_PCT;
+}
+
+function commitDailyRisk(riskAmount) {
+  resetDailyRisk();
+  _dailyRisk.committed += riskAmount;
+  const cap = getCapital() * MAX_DAILY_RISK_PCT;
+  console.log(`[SignalEngine] 🛡️  Daily risk: ₹${_dailyRisk.committed.toFixed(0)} / ₹${cap.toFixed(0)} limit`);
 }
 
 /** Reset daily capital tracking on new trading day. */
@@ -121,11 +183,6 @@ function commitCapital(positionValue) {
   _capitalState.committed += positionValue;
   const budget = getCapital() * MAX_CAPITAL_DAILY_MULT;
   console.log(`[SignalEngine] 💰 Capital committed: ₹${positionValue.toFixed(0)} | Day total: ₹${_capitalState.committed.toFixed(0)} / ₹${budget.toFixed(0)}`);
-}
-
-/** True once enough real LTP ticks have been observed for RSI to be meaningful */
-function isWarmedUp(symbol) {
-  return (_tickCount[symbol] || 0) >= WARMUP_TICKS;
 }
 
 function computeRSI(prices) {
@@ -253,9 +310,9 @@ function generateSignals(stocks, scanData) {
   for (const stock of stocks) {
     const ema20 = stock.ema20 ?? null;
 
-    // Update price history and compute RSI
-    updatePriceHistory(stock.symbol, stock.price, stock.prevClose);
-    const rsi = computeRSI(_priceHistory[stock.symbol]);
+    // Build 5-minute candle from this tick; compute RSI on closed candle closes
+    updateCandle(stock.symbol, stock.price);
+    const rsi = getCandleRSI(stock.symbol);
     // ── Pending confirmation check (from previous scan cycle) ──────────────────
     const pending = _pendingSignal[stock.symbol];
     if (pending) {
@@ -278,8 +335,10 @@ function generateSignals(stocks, scanData) {
           const pExpProfit   = Math.abs(pTarget - pEntry) * pQty;
           const pExpCost     = calcTradingCosts(pending.action, pEntry, pTarget, pQty);
           const pPositionVal = parseFloat((pEntry * pQty).toFixed(2));
-          if (pExpProfit > pExpCost && hasCapitalHeadroom(pPositionVal)) {
+          const pRiskAmount  = parseFloat((Math.abs(pEntry - pSl) * pQty).toFixed(2));
+          if (pExpProfit > pExpCost && hasCapitalHeadroom(pPositionVal) && hasDailyRiskHeadroom(pRiskAmount)) {
             commitCapital(pPositionVal);
+            commitDailyRisk(pRiskAmount);
             markSignalTime(stock.symbol);
             console.log(`[SignalEngine] ✅ ${pending.action} ${stock.symbol} CONFIRMED | price=₹${pEntry} | SL=₹${pSl} | Target=₹${pTarget}`);
             log('SIGNAL', 'Signal confirmed', { symbol: stock.symbol, action: pending.action, score: pending.score, rsi, entry: pEntry, sl: pSl, target: pTarget });
@@ -304,7 +363,7 @@ function generateSignals(stocks, scanData) {
               positionSize:     pQty,   // required by autoTrader + orderService
               positionValue:    pPositionVal,
               capitalDeployed:  pPositionVal,
-              riskAmount:       parseFloat((Math.abs(pEntry - pSl) * pQty).toFixed(2)),
+              riskAmount:       pRiskAmount,
               expectedProfit:   parseFloat(pExpProfit.toFixed(2)),
               expectedCost:     parseFloat(pExpCost.toFixed(2)),
               reasons:          [`Confirmed: price ₹${pEntry} ${pending.action === 'BUY' ? '>' : '<'} signal price ₹${pending.signalPrice ?? '?'}`],
@@ -333,12 +392,12 @@ function generateSignals(stocks, scanData) {
 
     if (ema20 === null) continue;
 
-    // ── Warmup guard: skip until RSI has 30+ real ticks of data (~2.5 min) ───
-    // Prevents cold-start flooding where seeded prevClose values produce fake RSI.
-    if (!isWarmedUp(stock.symbol)) {
-      const remaining = WARMUP_TICKS - (_tickCount[stock.symbol] || 0);
-      if (remaining % 10 === 0) {
-        console.log(`[SignalEngine] ⏳ ${stock.symbol} warming up (${remaining} ticks remaining)`);
+    // ── Candle warmup: wait for 14 closed 5-min candles (70 min of real data) ──
+    // Until then RSI is unreliable. This also eliminates the cold-start flooding problem.
+    if (!hasEnoughCandles(stock.symbol)) {
+      const built = (_candleHistory[stock.symbol] || []).length;
+      if (built % 3 === 0 && built < MIN_CLOSED_CANDLES) {
+        console.log(`[SignalEngine] ⏳ ${stock.symbol}: ${built}/${MIN_CLOSED_CANDLES} candles — waiting for RSI warmup`);
       }
       continue;
     }
