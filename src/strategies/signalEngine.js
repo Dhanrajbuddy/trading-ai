@@ -1,35 +1,38 @@
 'use strict';
 
 /**
- * Signal Engine — Simple Intraday NSE Strategy
+ * Signal Engine — Intraday NSE Strategy
  *
- * Entry conditions (BUY):  Price > EMA20, RSI > 55, bullish candle, volume >= 1.3x
- * Entry conditions (SELL): Price < EMA20, RSI < 45, bearish candle, volume >= 1.3x
+ * Entry conditions (BUY):  Price > EMA20, RSI > 55, bullish candle, volume >= 1.5x
+ * Entry conditions (SELL): Price < EMA20, RSI < 45, bearish candle, volume >= 1.5x
  * Skip: RSI 45–55 (neutral zone — no trade)
  * SL:     fixed 0.3% from entry
- * Target: fixed 0.8% from entry
- * Window: 9:30 AM – 3:15 PM IST, no overnight carry
- * Max 1 trade per day per symbol
+ * Target: fixed 1.2% from entry  (4:1 risk/reward)
+ * Window: 9:30 AM – 3:00 PM IST (no new entries after 3 PM — gives time to fill)
+ * Max 3 trades per day per symbol (increased from 1 to capture more opportunities)
  */
 
 const { log } = require('../services/logger');
 const { sendMarketClosedAlert } = require('../alerts/telegramAlert');
+const { calculatePositionSize, getCapital } = require('./riskManager');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const MIN_CONFIDENCE    = 50;             // minimum score to emit a signal
+const MIN_CONFIDENCE    = 65;             // minimum score — emits MEDIUM+ signals only (was 50)
 const RSI_PERIOD        = 14;
 const VOLUME_SPIKE_MIN  = 1.5;           // minimum volume multiplier for entry
 const SL_PCT            = 0.3;           // 0.3% fixed stop loss
-const TARGET_PCT        = 1.2;           // 1.2% fixed target
-const CAPITAL_PER_TRADE = 20000;         // fixed ₹20,000 capital per trade
+const TARGET_PCT        = 1.2;           // 1.2% fixed target → 4:1 R:R
+// Capital allocation — reads CAPITAL env var via riskManager (default ₹20,000 for testing)
+const MAX_CAPITAL_PER_TRADE_PCT = 0.80;  // deploy at most 80% of capital in a single trade
+const MAX_CAPITAL_DAILY_MULT    = 2.5;   // total daily budget = capital × 2.5 (MIS leverage headroom)
 const PRICE_HISTORY_MAX = 60;            // rolling window per symbol
-const COOLDOWN_MS       = 15 * 60 * 1000; // 15-minute repeat-signal block
-const MAX_TRADES_PER_DAY = 1;            // max signals per symbol per day
+const COOLDOWN_MS       = 10 * 60 * 1000; // 10-minute repeat-signal block (reduced from 15)
+const MAX_TRADES_PER_DAY = 3;            // max signals per symbol per day (increased from 1)
 
-// Trading window (IST): 9:30 AM – 3:15 PM (no new entries after 3:15 PM)
+// Trading window (IST): 9:30 AM – 3:00 PM (cutoff at 3 PM for safe fills)
 const WINDOW_START_MINS  = 9 * 60 + 30;  // 570 = 9:30 AM
-const ENTRY_CUTOFF_MINS  = 15 * 60 + 15; // 915 = 3:15 PM
+const ENTRY_CUTOFF_MINS  = 15 * 60 + 0;  // 900 = 3:00 PM
 
 // ─── Per-run in-memory state ──────────────────────────────────────────────────
 
@@ -38,6 +41,11 @@ const _lastSignalTime = {};  // symbol → epoch ms
 const _tradesToday    = {};  // symbol → { date: 'YYYY-MM-DD', count: number }
 const _prevCandle     = {};  // symbol → { high, low } from previous scan cycle
 const _pendingSignal  = {};  // symbol → { action, signalPrice, score } awaiting next-scan confirmation
+const _tickCount      = {};  // symbol → number of real LTP ticks observed (warmup guard)
+const _capitalState   = { date: '', committed: 0 }; // total ₹ deployed in confirmed signals today
+
+// Minimum real LTP ticks before RSI is trusted (5s scan → 30 ticks = 2.5 min warmup per symbol)
+const WARMUP_TICKS = 30;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,11 +86,46 @@ function updatePriceHistory(symbol, price, seedPrice) {
   if (!_priceHistory[symbol]) {
     const seed = seedPrice || price;
     _priceHistory[symbol] = new Array(RSI_PERIOD + 1).fill(seed);
+    _tickCount[symbol] = 0;
   }
   _priceHistory[symbol].push(price);
+  _tickCount[symbol] = (_tickCount[symbol] || 0) + 1;
   if (_priceHistory[symbol].length > PRICE_HISTORY_MAX) {
     _priceHistory[symbol].shift();
   }
+}
+
+/** Reset daily capital tracking on new trading day. */
+function resetCapitalDay() {
+  const today = getTodayIST();
+  if (_capitalState.date !== today) {
+    _capitalState.date      = today;
+    _capitalState.committed = 0;
+  }
+}
+
+/**
+ * Returns true if there is capital budget remaining to emit one more signal.
+ * Daily budget = CAPITAL × MAX_CAPITAL_DAILY_MULT
+ * Example: ₹20k capital × 2.5 = ₹50k/day max deployed across all signals.
+ */
+function hasCapitalHeadroom(positionValue) {
+  resetCapitalDay();
+  const budget = getCapital() * MAX_CAPITAL_DAILY_MULT;
+  return (_capitalState.committed + positionValue) <= budget;
+}
+
+/** Record capital committed to an emitted signal. */
+function commitCapital(positionValue) {
+  resetCapitalDay();
+  _capitalState.committed += positionValue;
+  const budget = getCapital() * MAX_CAPITAL_DAILY_MULT;
+  console.log(`[SignalEngine] 💰 Capital committed: ₹${positionValue.toFixed(0)} | Day total: ₹${_capitalState.committed.toFixed(0)} / ₹${budget.toFixed(0)}`);
+}
+
+/** True once enough real LTP ticks have been observed for RSI to be meaningful */
+function isWarmedUp(symbol) {
+  return (_tickCount[symbol] || 0) >= WARMUP_TICKS;
 }
 
 function computeRSI(prices) {
@@ -197,7 +240,7 @@ function generateSignals(stocks, scanData) {
   if (!isWithinTradingWindow()) {
     const ist  = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
     const day  = ist.getUTCDay();
-    const reason = (day === 0 || day === 6) ? 'Weekend — market closed' : 'Outside trading window (9:30–15:15 IST)';
+    const reason = (day === 0 || day === 6) ? 'Weekend — market closed' : 'Outside trading window (9:30–15:00 IST)';
     console.log(`[SignalEngine] ${reason}. No signals.`);
     log('INFO', `⛔ Market Closed — ${reason}. No signals generated.`);
     sendMarketClosedAlert();
@@ -227,11 +270,16 @@ function generateSignals(stocks, scanData) {
         const pTarget = pending.action === 'BUY'
           ? parseFloat((pEntry * (1 + TARGET_PCT / 100)).toFixed(2))
           : parseFloat((pEntry * (1 - TARGET_PCT / 100)).toFixed(2));
-        const pQty    = Math.floor(CAPITAL_PER_TRADE / pEntry);
+        // Position sizing: 1% risk rule from riskManager, capped at 80% of capital per trade
+        const _risk      = calculatePositionSize(pEntry, pSl, pTarget);
+        const _capLimit  = Math.floor(getCapital() * MAX_CAPITAL_PER_TRADE_PCT / pEntry);
+        const pQty       = Math.min(_risk.positionSize, _capLimit);
         if (pQty > 0) {
-          const pExpProfit = Math.abs(pTarget - pEntry) * pQty;
-          const pExpCost   = calcTradingCosts(pending.action, pEntry, pTarget, pQty);
-          if (pExpProfit > pExpCost) {
+          const pExpProfit   = Math.abs(pTarget - pEntry) * pQty;
+          const pExpCost     = calcTradingCosts(pending.action, pEntry, pTarget, pQty);
+          const pPositionVal = parseFloat((pEntry * pQty).toFixed(2));
+          if (pExpProfit > pExpCost && hasCapitalHeadroom(pPositionVal)) {
+            commitCapital(pPositionVal);
             markSignalTime(stock.symbol);
             console.log(`[SignalEngine] ✅ ${pending.action} ${stock.symbol} CONFIRMED | price=₹${pEntry} | SL=₹${pSl} | Target=₹${pTarget}`);
             log('SIGNAL', 'Signal confirmed', { symbol: stock.symbol, action: pending.action, score: pending.score, rsi, entry: pEntry, sl: pSl, target: pTarget });
@@ -253,11 +301,13 @@ function generateSignals(stocks, scanData) {
               slType:           'fixed-0.3%',
               target:           pTarget,
               qty:              pQty,
-              positionValue:    parseFloat((pEntry * pQty).toFixed(2)),
-              capitalPerTrade:  CAPITAL_PER_TRADE,
+              positionSize:     pQty,   // required by autoTrader + orderService
+              positionValue:    pPositionVal,
+              capitalDeployed:  pPositionVal,
+              riskAmount:       parseFloat((Math.abs(pEntry - pSl) * pQty).toFixed(2)),
               expectedProfit:   parseFloat(pExpProfit.toFixed(2)),
               expectedCost:     parseFloat(pExpCost.toFixed(2)),
-              reasons:          [`Confirmed: price ₹${pEntry} ${pending.action === 'BUY' ? '>' : '<'} signal price ₹${pending.signalPrice}`],
+              reasons:          [`Confirmed: price ₹${pEntry} ${pending.action === 'BUY' ? '>' : '<'} signal price ₹${pending.signalPrice ?? '?'}`],
               source:           stock.source ?? 'unknown',
               timestamp:        stock.timestamp,
               confirmed:        true,
@@ -283,14 +333,26 @@ function generateSignals(stocks, scanData) {
 
     if (ema20 === null) continue;
 
-    // Capture current candle data and update previous candle state
-    const candleHigh = stock.high ?? stock.price;
-    const candleLow  = stock.low  ?? stock.price;
+    // ── Warmup guard: skip until RSI has 30+ real ticks of data (~2.5 min) ───
+    // Prevents cold-start flooding where seeded prevClose values produce fake RSI.
+    if (!isWarmedUp(stock.symbol)) {
+      const remaining = WARMUP_TICKS - (_tickCount[stock.symbol] || 0);
+      if (remaining % 10 === 0) {
+        console.log(`[SignalEngine] ⏳ ${stock.symbol} warming up (${remaining} ticks remaining)`);
+      }
+      continue;
+    }
+
+    // Capture current candle data — use dayHigh/dayLow as the range proxy
+    // (Zerodha LTP quotes provide dayHigh/dayLow; stock.high/low are aliases)
+    const candleHigh = stock.high ?? stock.dayHigh ?? stock.price;
+    const candleLow  = stock.low  ?? stock.dayLow  ?? stock.price;
     const prev       = _prevCandle[stock.symbol] ?? null;
     _prevCandle[stock.symbol] = { high: candleHigh, low: candleLow };
 
-    // ── Avoid sideways (candle range < 0.2% of price) ──────────────────────
-    if ((candleHigh - candleLow) / stock.price < 0.002) continue;
+    // ── Avoid strictly sideways stocks (day range < 0.3% — near flatline) ──
+    // Uses dayHigh/dayLow range, so this only fires on truly dead stocks.
+    if (candleHigh > 0 && (candleHigh - candleLow) / stock.price < 0.003) continue;
 
     // ── Entry gates ─────────────────────────────────────────────────────────────
     const priceAboveEMA  = stock.price > ema20;
@@ -331,8 +393,10 @@ function generateSignals(stocks, scanData) {
       ? parseFloat((entry * (1 + TARGET_PCT / 100)).toFixed(2))
       : parseFloat((entry * (1 - TARGET_PCT / 100)).toFixed(2));
 
-    // ── Fixed position size: ₹20,000 per trade ─────────────────────────────
-    const qty = Math.floor(CAPITAL_PER_TRADE / entry);
+    // ── Position sizing: 1% risk rule via riskManager, capped at 80% of capital ──
+    const _riskCalc  = calculatePositionSize(entry, sl, target);
+    const _capLimit  = Math.floor(getCapital() * MAX_CAPITAL_PER_TRADE_PCT / entry);
+    const qty        = Math.min(_riskCalc.positionSize, _capLimit);
     if (qty <= 0) continue;
 
     // ── Cost viability filter ───────────────────────────────────────────────
@@ -344,7 +408,7 @@ function generateSignals(stocks, scanData) {
     }
 
     // ── Store as pending — await next scan cycle for confirmation ──────────
-    _pendingSignal[stock.symbol] = { action, score };
+    _pendingSignal[stock.symbol] = { action, score, signalPrice: stock.price };
     console.log(`[SignalEngine] ⏳ ${action} ${stock.symbol} score=${score} | RSI=${rsi ?? 'N/A'} | price=₹${stock.price} — awaiting ${action === 'BUY' ? 'bullish' : 'bearish'} confirmation candle`);
     log('SIGNAL', 'Signal pending', { symbol: stock.symbol, action, score, rsi, price: stock.price });
   }

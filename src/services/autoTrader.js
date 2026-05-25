@@ -22,11 +22,25 @@
 const { placeOrder }           = require('./orderService');
 const { isMarketOpen }         = require('../utils/marketStatus');
 const { sendAutoTradeAlert }   = require('../alerts/telegramAlert');
+const { getCapital }           = require('../strategies/riskManager');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const MIN_CONFIDENCE    = 80;  // require STRONG signals only (signalEngine STRONG >= 80)
-const MAX_TRADES_PER_DAY = 3;  // hard cap on auto-executions per calendar day
+const MIN_CONFIDENCE = 80;  // require STRONG signals only (signalEngine STRONG >= 80)
+
+/**
+ * Capital-aware daily auto-trade limit.
+ * Scales with CAPITAL env var so the system never over-commits:
+ *   < ₹25k  → 2 trades/day  (test capital, e.g. ₹20k)
+ *   ₹25k–₹75k → 3 trades/day  (growth phase)
+ *   > ₹75k  → 4 trades/day  (scaled capital)
+ */
+function getMaxTradesPerDay() {
+  const capital = getCapital();
+  if (capital < 25_000) return 2;
+  if (capital < 75_000) return 3;
+  return 4;
+}
 
 // ─── Daily state (resets at IST midnight) ────────────────────────────────────
 
@@ -116,8 +130,8 @@ async function processSignal(signal) {
 
     // ── Gate 4: Daily auto-trade cap ────────────────────────────────────────
     refreshDay();
-    if (_tradesToday >= MAX_TRADES_PER_DAY) {
-      skip(symbol, `Daily auto-trade limit reached (${_tradesToday}/${MAX_TRADES_PER_DAY})`);
+    if (_tradesToday >= getMaxTradesPerDay()) {
+      skip(symbol, `Daily auto-trade limit reached (${_tradesToday}/${getMaxTradesPerDay()})`);
       return;
     }
 
@@ -148,7 +162,7 @@ async function processSignal(signal) {
 
       console.log(
         `[AutoTrader] ✅ ${signal.action} ${symbol} placed | ` +
-        `orderId=${result.orderId} | trades today: ${_tradesToday}/${MAX_TRADES_PER_DAY}`
+      `orderId=${result.orderId} | trades today: ${_tradesToday}/${getMaxTradesPerDay()}`
       );
 
       // Fire-and-forget Telegram alert
@@ -179,7 +193,7 @@ function getAutoTradeState() {
     date:          _day,
     tradesToday:   _tradesToday,
     tradedStocks:  [..._tradedStocks],
-    maxPerDay:     MAX_TRADES_PER_DAY,
+    maxPerDay:     getMaxTradesPerDay(),
     minConfidence: MIN_CONFIDENCE,
   };
 }

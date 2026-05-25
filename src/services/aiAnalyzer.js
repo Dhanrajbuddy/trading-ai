@@ -33,7 +33,7 @@ function buildPrompt(signal) {
     `  VWAP:            ${signal.vwap || 'N/A'}\n` +
     `  20 EMA:          ${signal.ema20 || 'N/A'}\n` +
     `  Entry:           ₹${signal.entry}\n` +
-    `  Stop-Loss:       ₹${signal.sl}\n` +
+    `  Stop-Loss:       ₹${signal.stopLoss}\n` +
     `  Target:          ₹${signal.target}\n` +
     `  Reasons:         ${(signal.reasons || []).join('; ')}\n`
   );

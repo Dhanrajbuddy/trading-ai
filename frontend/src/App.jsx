@@ -164,9 +164,12 @@ function SignalsTable({ signals, onExecute, executingSymbol }) {
             <th className="px-4 py-3 text-left">Signal</th>
             <th className="px-4 py-3 text-right">Price</th>
             <th className="px-4 py-3 text-right">Change</th>
+            <th className="px-4 py-3 text-right">RSI</th>
+            <th className="px-4 py-3 text-right">Qty</th>
             <th className="px-4 py-3 text-right">Entry</th>
             <th className="px-4 py-3 text-right">SL</th>
             <th className="px-4 py-3 text-right">Target</th>
+            <th className="px-4 py-3 text-right">Exp. Profit</th>
             <th className="px-4 py-3 text-left">Confidence</th>
             <th className="px-4 py-3 text-left">Reason</th>
             <th className="px-4 py-3 text-right">Time</th>
@@ -183,6 +186,13 @@ function SignalsTable({ signals, onExecute, executingSymbol }) {
             const confidence = s.confidence ?? analysis.confidence ?? 0
             const canExecute = confidence >= 75
             const isLoading  = executingSymbol === `${s.symbol}-${i}`
+            const rsiVal     = s.rsi != null ? parseFloat(s.rsi).toFixed(1) : '—'
+            const rsiColor   = s.rsi != null
+              ? (s.rsi > 60 ? 'text-green-400' : s.rsi < 40 ? 'text-red-400' : 'text-yellow-400')
+              : 'text-gray-500'
+            const netProfit  = s.expectedProfit != null && s.expectedCost != null
+              ? (s.expectedProfit - s.expectedCost).toFixed(0)
+              : null
 
             return (
               <tr key={`${s.symbol}-${i}`} className={`${rowBg} transition-colors`}>
@@ -190,9 +200,16 @@ function SignalsTable({ signals, onExecute, executingSymbol }) {
                 <td className="px-4 py-3"><Badge action={s.action} strength={s.strength} /></td>
                 <td className="px-4 py-3 text-right font-mono">{currency(s.price)}</td>
                 <td className={`px-4 py-3 text-right font-mono ${chgColor}`}>{pct(s.changePercent)}</td>
+                <td className={`px-4 py-3 text-right font-mono font-semibold ${rsiColor}`}>{rsiVal}</td>
+                <td className="px-4 py-3 text-right font-mono text-gray-300">{s.positionSize ?? s.qty ?? '—'}</td>
                 <td className="px-4 py-3 text-right font-mono text-blue-300">{currency(s.entry)}</td>
                 <td className="px-4 py-3 text-right font-mono text-red-400">{currency(s.stopLoss ?? s.sl)}</td>
                 <td className="px-4 py-3 text-right font-mono text-green-400">{currency(s.target)}</td>
+                <td className="px-4 py-3 text-right font-mono">
+                  {netProfit != null
+                    ? <span className={parseFloat(netProfit) > 0 ? 'text-green-400' : 'text-red-400'}>₹{netProfit}</span>
+                    : <span className="text-gray-500">—</span>}
+                </td>
                 <td className="px-4 py-3">
                   <ConfidenceBar value={confidence} />
                 </td>
@@ -727,6 +744,10 @@ export default function App() {
   const buyCount  = signals.filter((s) => s.action === 'BUY').length
   const sellCount = signals.filter((s) => s.action === 'SELL').length
   const dataSource = stocks[0]?.source || '—'
+  const totalExpectedProfit = signals.reduce((acc, s) => {
+    const net = (s.expectedProfit ?? 0) - (s.expectedCost ?? 0)
+    return acc + (net > 0 ? net : 0)
+  }, 0)
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -765,11 +786,17 @@ export default function App() {
 
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
           <StatCard label="Live Stocks"   value={stocks.length}  sub="tracked instruments" />
           <StatCard label="Total Signals" value={signals.length} sub="last 100 cycles" />
           <StatCard label="BUY Signals"   value={buyCount}       color="text-green-400" sub="active" />
           <StatCard label="SELL Signals"  value={sellCount}      color="text-red-400"   sub="active" />
+          <StatCard
+            label="Exp. Profit Today"
+            value={totalExpectedProfit > 0 ? `₹${Math.round(totalExpectedProfit)}` : '₹0'}
+            color={totalExpectedProfit >= 150 ? 'text-green-400' : totalExpectedProfit > 0 ? 'text-yellow-400' : 'text-gray-400'}
+            sub={`if ${signals.length} signal${signals.length !== 1 ? 's' : ''} hit target`}
+          />
         </div>
 
         {/* Tabs */}
