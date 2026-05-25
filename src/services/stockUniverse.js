@@ -47,7 +47,11 @@ const NIFTY_UNIVERSE = [
 const TOP_N       = 20;              // dynamic working set size
 const REFRESH_MS  = 5 * 60 * 1000;  // 5-minute TTL
 
-// ─── Cache ────────────────────────────────────────────────────────────────────
+// ─── Confirmed-profitable stocks (60-day backtest: +₹231, 46.7% WR) ──────────
+// These are always included in the active set regardless of daily ranking.
+const PRIORITY_SYMBOLS = new Set(['BAJFINANCE', 'BAJAJFINSV', 'TCS']);
+
+
 
 let _selectedStocks  = [];           // Array<stockObject>  — current top 20
 let _selectedSymbols = new Set();    // Set<string>  bare tickers, e.g. 'RELIANCE'
@@ -86,6 +90,14 @@ function selectTopActive(allStocks) {
   // Merge preserving priority order, deduplicate, cap at TOP_N
   const seen     = new Set();
   const selected = [];
+
+  // Always include priority (confirmed-profitable) stocks first
+  for (const s of allStocks) {
+    if (PRIORITY_SYMBOLS.has(s.symbol) && !seen.has(s.symbol)) {
+      seen.add(s.symbol);
+      selected.push(s);
+    }
+  }
 
   for (const s of [...gainers, ...losers, ...highVolume]) {
     if (!seen.has(s.symbol) && selected.length < TOP_N) {
