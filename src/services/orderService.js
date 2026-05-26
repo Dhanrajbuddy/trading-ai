@@ -96,7 +96,7 @@ function logOrder(record) {
   const status = record.status === 'SUCCESS' ? '✅' : '❌';
   console.log(
     `[OrderService] ${status} ${record.status} | ` +
-    `${record.action} ${record.symbol} × ${record.quantity} @ MARKET | ` +
+    `${record.action} ${record.symbol} × ${record.quantity} @ LIMIT | ` +
     (record.orderId ? `orderId=${record.orderId}` : `reason=${record.reason}`)
   );
 }
@@ -285,18 +285,29 @@ async function placeOrder(signal) {
     return { status: 'REJECTED', reason: check.reason };
   }
 
-  // ── Place main entry order (MARKET) ───────────────────────────────────────
+  // ── Place main entry order (LIMIT with 0.2% slippage buffer) ────────────
+  // Zerodha API rejects bare MARKET orders. We use LIMIT + a small buffer
+  // so the order fills immediately at market while satisfying the API.
+  // BUY: bid up to 0.2% above signal entry  (ensures fill on fast moves)
+  // SELL: offer down to 0.2% below entry    (ensures fill on fast drops)
+  const SLIPPAGE = 0.002;
+  const rawEntry  = parseFloat(signal.entry) || 0;
+  const limitPrice = action === 'BUY'
+    ? parseFloat((rawEntry * (1 + SLIPPAGE)).toFixed(2))
+    : parseFloat((rawEntry * (1 - SLIPPAGE)).toFixed(2));
+
   try {
     console.log(
-      `[OrderService] Placing ${action} MARKET order: ${symbol} × ${quantity} (${product}) | ` +
-      `conf=${signal.confidence}% | entry=₹${signal.entry} sl=₹${signal.stopLoss} target=₹${signal.target}`
+      `[OrderService] Placing ${action} LIMIT order: ${symbol} × ${quantity} (${product}) | ` +
+      `conf=${signal.confidence}% | limit=₹${limitPrice} sl=₹${signal.stopLoss} target=₹${signal.target}`
     );
 
     const entryOrderId = await submitKiteOrder({
       tradingsymbol:    symbol,
       exchange:         'NSE',
       transaction_type: action,
-      order_type:       'MARKET',
+      order_type:       'LIMIT',
+      price:            String(limitPrice),
       quantity:         String(quantity),
       product,
       validity:         'DAY',
@@ -305,7 +316,7 @@ async function placeOrder(signal) {
     // Update daily state
     _state.dailyCount += 1;
     _state.tradedToday.add(symbol);
-    console.log(`[OrderService] ✅ Entry order placed: ${symbol} ${action} MARKET | orderId=${entryOrderId}`);
+    console.log(`[OrderService] ✅ Entry order placed: ${symbol} ${action} LIMIT ₹${limitPrice} | orderId=${entryOrderId}`);
 
     // ── Place bracket orders (SL + Target) ───────────────────────────────────
     const bracket = await placeBracketOrders(
