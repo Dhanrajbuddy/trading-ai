@@ -59,6 +59,8 @@ app.use((_req, res, next) => {
 let latestStocks  = [];
 /** @type {Array<Object>} */
 let latestSignals = [];
+/** @type {boolean} */
+let isAuthenticated = false;
 
 // ─── Pipeline ─────────────────────────────────────────────────────────────────
 
@@ -66,8 +68,21 @@ async function runPipeline() {
   const ts = new Date().toISOString();
   console.log(`[Pipeline] Running market scan... (${ts})`);
 
-  // 1. Fetch market data (Zerodha or mock)
-  const stocks = await getMarketData();
+  // 1. Fetch market data (Zerodha only — no mock fallback)
+  let stocks;
+  try {
+    stocks = await getMarketData();
+    isAuthenticated = true;
+  } catch (err) {
+    if (err.code === 'NOT_AUTHENTICATED') {
+      isAuthenticated = false;
+      console.log('[Pipeline] Not authenticated — skipping scan. Visit /zerodha/login to connect.');
+      latestStocks = [];
+      return;
+    }
+    console.error(`[Pipeline] Market data error: ${err.message}`);
+    return;
+  }
   latestStocks = stocks;
 
   // 1a. Dynamic stock selection — refresh every 5 min (force on very first run)
@@ -116,12 +131,13 @@ async function runPipeline() {
 
 app.get('/health', (_req, res) => {
   res.json({
-    status:    'ok',
-    service:   'trading-ai',
-    timestamp: new Date().toISOString(),
-    uptime:    process.uptime(),
-    stocks:    latestStocks.length,
-    signals:   latestSignals.length,
+    status:          'ok',
+    service:         'trading-ai',
+    timestamp:       new Date().toISOString(),
+    uptime:          process.uptime(),
+    authenticated:   isAuthenticated,
+    stocks:          latestStocks.length,
+    signals:         latestSignals.length,
   });
 });
 

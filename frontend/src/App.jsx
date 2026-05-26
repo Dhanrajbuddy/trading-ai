@@ -785,6 +785,28 @@ export default function App() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Auth gate — shown when backend reports no Zerodha session */}
+        {health && !health.authenticated && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="bg-gray-900 border border-yellow-700 rounded-2xl p-10 max-w-md w-full shadow-2xl">
+              <div className="text-5xl mb-4">🔐</div>
+              <h2 className="text-2xl font-bold text-white mb-2">Not Connected to Zerodha</h2>
+              <p className="text-gray-400 text-sm mb-6">
+                Please login to Zerodha to start algorithmic trading. Real-time market data and
+                signal generation require an active Zerodha session.
+              </p>
+              <a
+                href="http://localhost:3000/zerodha/login"
+                className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-3 rounded-xl transition-colors text-sm"
+              >
+                Login with Zerodha →
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Main dashboard — only shown when authenticated */}
+        {health && health.authenticated && <>
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
           <StatCard label="Live Stocks"   value={stocks.length}  sub="tracked instruments" />
@@ -820,6 +842,7 @@ export default function App() {
         {tab === 'Stocks'     && <StocksTable stocks={stocks} />}
         {tab === 'Top Movers' && <TopMovers gainers={top.gainers} losers={top.losers} />}
         {tab === 'Debug Logs' && <DebugLogs logs={debugLogs} onClear={handleClearLogs} />}
+        </>}
       </main>
 
       {/* Order details modal */}

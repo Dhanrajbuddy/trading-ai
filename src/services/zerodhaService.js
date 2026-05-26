@@ -3,12 +3,11 @@
 /**
  * Zerodha Kite API Service
  *
- * Uses real market data when ZERODHA_API_KEY + ZERODHA_ACCESS_TOKEN are set.
- * Falls back to mock data automatically when credentials are missing.
+ * Requires ZERODHA_API_KEY + ZERODHA_ACCESS_TOKEN to be set.
+ * If credentials are missing or the API call fails, throws an error — no mock fallback.
  */
 
 const axios = require('axios');
-const { generateMarketData } = require('./mockData');
 const { getUniverseInstruments } = require('./stockUniverse');
 
 const KITE_BASE = 'https://api.kite.trade';
@@ -133,41 +132,21 @@ async function fetchFromKite() {
 }
 
 /**
- * Get market data — uses Zerodha if configured, else mock
+ * Get live market data from Zerodha Kite API.
+ * Throws if credentials are missing or the API call fails — no mock fallback.
  * @returns {Promise<Array<Object>>}
  */
 async function getMarketData() {
   if (!hasZerodhaCredentials()) {
-    console.log('[DataSource] Using mock data (no Zerodha credentials)');
-    const mock = generateMarketData();
-    // Enrich mock with vwap + open + high/low aliases for scanner compatibility
-    return mock.map((s) => ({
-      ...s,
-      open: parseFloat((s.prevClose * (1 + (Math.random() * 0.02 - 0.01))).toFixed(2)),
-      high: s.dayHigh,
-      low:  s.dayLow,
-      vwap: parseFloat(((s.dayHigh + s.dayLow + s.price) / 3).toFixed(2)),
-      source: 'mock',
-    }));
+    const err = new Error('Please login to Zerodha to start algorithmic trading.');
+    err.code = 'NOT_AUTHENTICATED';
+    throw err;
   }
 
-  try {
-    console.log('[DataSource] Fetching live data from Zerodha Kite API...');
-    const data = await fetchFromKite();
-    console.log(`[DataSource] Fetched ${data.length} instruments from Kite`);
-    return data;
-  } catch (err) {
-    console.warn(`[DataSource] Zerodha API error: ${err.message} — falling back to mock`);
-    const mock = generateMarketData();
-    return mock.map((s) => ({
-      ...s,
-      open: parseFloat((s.prevClose * (1 + (Math.random() * 0.02 - 0.01))).toFixed(2)),
-      high: s.dayHigh,
-      low:  s.dayLow,
-      vwap: parseFloat(((s.dayHigh + s.dayLow + s.price) / 3).toFixed(2)),
-      source: 'mock-fallback',
-    }));
-  }
+  console.log('[DataSource] Fetching live data from Zerodha Kite API...');
+  const data = await fetchFromKite();
+  console.log(`[DataSource] Fetched ${data.length} instruments from Kite`);
+  return data;
 }
 
 module.exports = { getMarketData, hasZerodhaCredentials };
