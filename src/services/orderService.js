@@ -102,6 +102,31 @@ function logOrder(record) {
 }
 
 /**
+ * Round a price to a valid NSE tick boundary.
+ *
+ * NSE equities have a tick size of ₹0.05. Some scripts (e.g. ADANIENT)
+ * use ₹0.10. A price that is a multiple of ₹0.10 is always valid for both.
+ * So if rounding to ₹0.05 produces a .X5 ending, we nudge one more step:
+ *   BUY  → round UP   to the next ₹0.10 (willing to pay a touch more to fill)
+ *   SELL → round DOWN to the prev ₹0.10 (willing to accept a touch less to fill)
+ *
+ * @param {number} price
+ * @param {'BUY'|'SELL'} action
+ * @returns {number}
+ */
+function tickRound(price, action) {
+  // Step 1 — round to nearest ₹0.05
+  let p = Math.round(price * 20) / 20;
+  // Step 2 — if last paise digit is 5, nudge to nearest ₹0.10
+  if (Math.round(p * 100) % 10 === 5) {
+    p = action === 'BUY'
+      ? Math.ceil(p * 10) / 10
+      : Math.floor(p * 10) / 10;
+  }
+  return parseFloat(p.toFixed(2));
+}
+
+/**
  * Submit a single order to Kite and return the order_id.
  * Throws on HTTP error so callers can handle individually.
  * @param {Object} params  URLSearchParams key-value pairs
@@ -292,9 +317,10 @@ async function placeOrder(signal) {
   // SELL: offer down to 0.2% below entry    (ensures fill on fast drops)
   const SLIPPAGE = 0.002;
   const rawEntry  = parseFloat(signal.entry) || 0;
-  const limitPrice = action === 'BUY'
-    ? parseFloat((rawEntry * (1 + SLIPPAGE)).toFixed(2))
-    : parseFloat((rawEntry * (1 - SLIPPAGE)).toFixed(2));
+  const limitPrice = tickRound(
+    action === 'BUY' ? rawEntry * (1 + SLIPPAGE) : rawEntry * (1 - SLIPPAGE),
+    action,
+  );
 
   try {
     console.log(
