@@ -52,8 +52,9 @@ const _dailyRisk      = { date: '', committed: 0 };
 const _candle15State   = {};  // symbol → { windowMs, open, high, low, close, volume }
 const _candle15History = {};  // symbol → [{ open, high, low, close, volume }, ...] closed candles
 
-// ORB state (reset each day)
-const _orbState = {};  // symbol → { high, low, established, day }
+// ORB state (reset each day OR when data source changes)
+const _orbState = {};  // symbol → { high, low, established, day, source }
+let   _lastDataSource = null;  // track source so we can detect mock→zerodha switch
 
 // VWAP state (reset each day)
 const _vwapState = {}; // symbol → { accum, vol, day }
@@ -105,7 +106,7 @@ function isMaxTradesReached(symbol) {
 // Aligns to UTC multiples of 15-min (e.g. 3:45, 4:00 UTC = 9:15, 9:30 IST).
 // When a new 15-min window starts, the previous candle is saved to _candle15History.
 //
-function update15MinCandle(symbol, price, volume) {
+function update15MinCandle(symbol, price, volume, source) {
   const windowMs = Math.floor(Date.now() / (CANDLE_MINS_15 * 60_000)) * (CANDLE_MINS_15 * 60_000);
   const state    = _candle15State[symbol];
 
@@ -118,24 +119,35 @@ function update15MinCandle(symbol, price, volume) {
 
       // Update ORB if not yet established (first ORB_CANDLES candles form the range)
       const today = getTodayIST();
-      if (!_orbState[symbol] || _orbState[symbol].day !== today) {
-        _orbState[symbol] = { high: -Infinity, low: Infinity, established: false, day: today };
+      // Stamp source on ORB if not already set
+      if (_orbState[symbol] && !_orbState[symbol].source) {
+        _orbState[symbol].source = source || 'unknown';
       }
       const orb = _orbState[symbol];
-      if (!orb.established) {
-        const dayCandles = _candle15History[symbol].filter(() => true); // all from today (reset daily)
+      if (orb && !orb.established) {
         orb.high = Math.max(orb.high, state.high);
         orb.low  = Math.min(orb.low,  state.low);
-        // Count how many candles closed today (ORB needs ORB_CANDLES)
-        const todayCount = _candle15History[symbol].length; // all are today-relative after daily reset
+        const todayCount = _candle15History[symbol].length;
         if (todayCount >= ORB_CANDLES) {
-          orb.established = true;
-          const pct = ((orb.high - orb.low) / state.close * 100).toFixed(2);
-          console.log(`[SignalEngine] 📊 ${symbol} ORB established — High=₹${orb.high.toFixed(2)} Low=₹${orb.low.toFixed(2)} Range=${pct}%`);
-          log('INFO', `ORB established for ${symbol}`, { orbHigh: orb.high, orbLow: orb.low, pct });
+          const orbRange = orb.high - orb.low;
+          const orbRangePct = (orbRange / state.close) * 100;
+          // Sanity guard: NSE large-cap 30-min ORB is always 0.1–5%. Anything larger
+          // means corrupted state (e.g. candle built from mock-data prices). Reject.
+          if (orbRangePct > 5.0) {
+            console.log(`[SignalEngine] ⛔ ${symbol} ORB rejected — range ${orbRangePct.toFixed(1)}% is implausible (likely mock-data corruption). Waiting for a valid ORB.`);
+            log('WARN', `ORB rejected for ${symbol}`, { orbHigh: orb.high, orbLow: orb.low, orbRangePct: orbRangePct.toFixed(2) });
+            // Force full reset so fresh candles rebuild a valid ORB
+            _candle15History[symbol] = [];
+            _candle15State[symbol]   = null;
+            _orbState[symbol]        = { high: -Infinity, low: Infinity, established: false, day: orb.day, source: orb.source };
+          } else {
+            orb.established = true;
+            console.log(`[SignalEngine] 📊 ${symbol} ORB established — High=₹${orb.high.toFixed(2)} Low=₹${orb.low.toFixed(2)} Range=${orbRangePct.toFixed(2)}% source=${orb.source}`);
+            log('INFO', `ORB established for ${symbol}`, { orbHigh: orb.high, orbLow: orb.low, orbRangePct: orbRangePct.toFixed(2), source: orb.source });
+          }
         }
       }
-    }
+    }  // end if (state)
     _candle15State[symbol] = { windowMs, open: price, high: price, low: price, close: price, volume: volume || 0 };
   } else {
     state.high    = Math.max(state.high, price);
@@ -145,16 +157,29 @@ function update15MinCandle(symbol, price, volume) {
   }
 }
 
-/** Reset 15-min state and ORB at start of each trading day. */
-function resetDayState(symbol) {
-  const today = getTodayIST();
-  const orb   = _orbState[symbol];
-  if (orb && orb.day === today) return; // already reset today
+/**
+ * Reset 15-min state and ORB.
+ * Triggers on: (a) new calendar day, or (b) data source changed (mock → zerodha).
+ * Prevents stale mock-data ORB from being used with live prices.
+ */
+function resetDayState(symbol, currentSource) {
+  const today     = getTodayIST();
+  const orb       = _orbState[symbol];
+  const newDay    = !orb || orb.day !== today;
+  const srcChange = orb && orb.source && currentSource && orb.source !== currentSource;
+
+  if (!newDay && !srcChange) return; // nothing to reset
+
+  if (srcChange) {
+    console.log(`[SignalEngine] ⚠️  ${symbol} data source changed ${orb.source} → ${currentSource} — ORB reset`);
+    log('INFO', `ORB reset: data source changed for ${symbol}`, { from: orb.source, to: currentSource });
+  }
+
   _candle15History[symbol] = [];
   _candle15State[symbol]   = null;
-  _orbState[symbol]        = { high: -Infinity, low: Infinity, established: false, day: today };
+  _orbState[symbol]        = { high: -Infinity, low: Infinity, established: false, day: today, source: currentSource };
   _vwapState[symbol]       = { accum: 0, vol: 0, day: today };
-  console.log(`[SignalEngine] 🔄 ${symbol} day state reset for ${today}`);
+  if (newDay) console.log(`[SignalEngine] 🔄 ${symbol} day state reset for ${today}`);
 }
 
 /** Returns RSI computed on closed 15-min candle closes, null if too few candles. */
@@ -330,11 +355,21 @@ function generateSignals(stocks, scanData) {
     const price = stock.price;
     const vol   = stock.volume || 0;
 
-    // Reset state on new trading day
-    resetDayState(sym);
+    // Detect data source (zerodha / mock). Reset ORB if source changed since last scan.
+    const currentSource = stock.source || 'unknown';
+    if (_lastDataSource !== null && _lastDataSource !== currentSource) {
+      // Source switched (e.g. mock → zerodha) — force-reset ALL ORB states this cycle
+      for (const s of Object.keys(_orbState)) {
+        if (_orbState[s]) _orbState[s].source = null; // triggers srcChange in resetDayState
+      }
+    }
+    _lastDataSource = currentSource;
+
+    // Reset state on new trading day or data-source switch
+    resetDayState(sym, currentSource);
 
     // Build 15-min candle from this tick
-    update15MinCandle(sym, price, vol);
+    update15MinCandle(sym, price, vol, currentSource);
 
     // ── Gates ────────────────────────────────────────────────────────────────
     if (isMaxTradesReached(sym)) continue;
