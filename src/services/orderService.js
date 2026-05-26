@@ -25,7 +25,12 @@
 const axios = require('axios');
 const { sendOrderAlert, sendOcoAlert } = require('../alerts/telegramAlert');
 const { isMarketOpen, marketStatusInfo } = require('../utils/marketStatus');
-const { getActiveSymbols }             = require('./stockUniverse');
+const { getUniverseInstruments }         = require('./stockUniverse');
+
+// Pre-built set of bare tickers in the Nifty universe (e.g. 'HEROMOTOCO').
+// Any stock we quote is eligible for orders — we don't restrict to the
+// dynamic top-20 selection, which is a ranking hint, not an order gate.
+const NSE_UNIVERSE = new Set(getUniverseInstruments().map((i) => i.replace('NSE:', '')));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -199,12 +204,12 @@ function runSafetyChecks(signal) {
     };
   }
 
-  // 3. NSE-only symbols — must be in the current dynamic active list
+  // 3. NSE-only symbols — must be in the tracked NSE universe
   const symbol = (signal.symbol || '').toUpperCase().replace(/^NSE:/, '');
-  if (!getActiveSymbols().has(symbol)) {
+  if (!NSE_UNIVERSE.has(symbol)) {
     return {
       ok: false,
-      reason: `Symbol ${symbol} is not in the current dynamic NSE active list`,
+      reason: `Symbol ${symbol} is not in the NSE universe`,
     };
   }
 
