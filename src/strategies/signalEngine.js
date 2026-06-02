@@ -522,4 +522,16 @@ function generateSignals(stocks, scanData) {
 }
 
 
-module.exports = { generateSignals };
+/**
+ * Reset per-symbol cooldown timestamps so the first signal of a new trading
+ * day is never blocked by yesterday's cooldown window.
+ * Called by index.js daily reset scheduler (after 3:30 PM IST).
+ */
+function resetForNewDay() {
+  for (const sym of Object.keys(_lastSignalTime)) {
+    delete _lastSignalTime[sym];
+  }
+  console.log('[SignalEngine] 🔄 Daily reset — cooldown timestamps cleared.');
+}
+
+module.exports = { generateSignals, resetForNewDay };

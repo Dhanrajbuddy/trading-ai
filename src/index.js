@@ -30,7 +30,7 @@ const { getMarketData }       = require('./services/zerodhaService');
 const { generateAccessToken } = require('./services/zerodhaAuth');
 const { placeOrder, getDailyState, getOrderLog, monitorOrders, getOcoTrades } = require('./services/orderService');
 const { runScanners }         = require('./scanners/marketScanner');
-const { generateSignals }     = require('./strategies/signalEngine');
+const { generateSignals, resetForNewDay } = require('./strategies/signalEngine');
 const { analyzeSignal }       = require('./services/aiAnalyzer');
 const { trackSignal, updatePrices, getPortfolioStats } = require('./services/signalTracker');
 const { sendAlert, sendMarketAlert }   = require('./alerts/telegramAlert');
@@ -62,12 +62,66 @@ let latestStocks  = [];
 let latestSignals = [];
 /** @type {boolean} */
 let isAuthenticated = false;
+/** YYYY-MM-DD (IST) that latestSignals belongs to — used for auto-reset */
+let _signalsDay = '';
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function todayIST() {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().slice(0, 10);
+}
+
+function currentMinsIST() {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return ist.getUTCHours() * 60 + ist.getUTCMinutes();
+}
+
+/**
+ * End-of-day reset — clears all in-memory session data so the next
+ * trading day starts completely clean without a container rebuild.
+ * Triggered automatically at 3:30 PM IST and on new-day detection.
+ */
+function performDailyReset() {
+  const today = todayIST();
+  console.log(`[DailyReset] ♻️  Performing end-of-day reset for ${today}`);
+  latestSignals = [];
+  latestStocks  = [];
+  _signalsDay   = today;
+  resetForNewDay(); // clear signalEngine cooldown timestamps
+  console.log('[DailyReset] ✅ latestSignals, latestStocks, and cooldowns cleared. Ready for next session.');
+}
+
+// ─── 3:30 PM IST Scheduled Reset ─────────────────────────────────────────────
+// Checks every minute; fires once when the clock crosses 15:30 IST.
+// Belt-and-suspenders in case the process stays alive across days.
+
+const RESET_MINS    = 15 * 60 + 30; // 3:30 PM IST
+let   _resetFiredOn = '';            // YYYY-MM-DD to ensure reset fires only once per day
+
+setInterval(() => {
+  const today = todayIST();
+  const mins  = currentMinsIST();
+  if (mins >= RESET_MINS && _resetFiredOn !== today) {
+    _resetFiredOn = today;
+    performDailyReset();
+  }
+}, 60_000); // check every minute
 
 // ─── Pipeline ─────────────────────────────────────────────────────────────────
 
 async function runPipeline() {
   const ts = new Date().toISOString();
   console.log(`[Pipeline] Running market scan... (${ts})`);
+
+  // Detect new trading day: if we have signals from yesterday, wipe them now
+  // (covers the case where the process survives midnight / a weekend)
+  const today = todayIST();
+  if (_signalsDay && _signalsDay !== today && latestSignals.length > 0) {
+    console.log(`[Pipeline] New trading day detected (${_signalsDay} → ${today}) — clearing stale signals.`);
+    performDailyReset();
+  }
+  if (!_signalsDay) _signalsDay = today;
 
   // 1. Fetch market data (Zerodha only — no mock fallback)
   let stocks;
@@ -124,6 +178,7 @@ async function runPipeline() {
   }
 
   latestSignals = [...enriched, ...latestSignals].slice(0, 100);
+  _signalsDay   = today;
   console.log(`[Pipeline] ✅ ${enriched.length} signal(s) processed.\n`);
 
   // 5. Auto-trading — each enriched signal is evaluated by autoTrader
