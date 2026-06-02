@@ -27,7 +27,7 @@ const SL_PCT              = 0.5;
 const TARGET_MULT         = 2.0;    // 2× ORB range as target
 const TARGET_PCT_FALLBACK = 1.0;    // fallback if ORB range is tiny
 const ORB_CANDLES         = 2;      // first 2 × 15-min candles (30 min) form the ORB
-const ORB_BUFFER_PCT      = 0.10;   // 0.10% above/below ORB to filter false breakouts
+const ORB_BUFFER_PCT      = 0.25;   // 0.25% above/below ORB to filter false breakouts (was 0.10%)
 const CANDLE_MINS_15      = 15;     // 15-minute candles
 const RSI_PERIOD          = 14;
 const MAX_CAPITAL_PER_TRADE_PCT = 0.80;
@@ -408,8 +408,15 @@ function generateSignals(stocks, scanData) {
     const rsiOkBuy  = rsi === null || (rsi >= 45 && rsi <= 72);
     const rsiOkSell = rsi === null || (rsi >= 28 && rsi <= 55);
 
-    const isBuy  = price > orbBufHigh && bullishCandle && hasVolumeSpike && rsiOkBuy;
-    const isSell = price < orbBufLow  && bearishCandle && hasVolumeSpike && rsiOkSell;
+    // VWAP alignment: hard gate (not just a scoring factor).
+    // For BUY: price must be ABOVE VWAP (stock trading above its intraday average)
+    // For SELL: price must be BELOW VWAP (if price is recovering toward VWAP, skip)
+    // Skip gate if VWAP not yet computed (early in the session)
+    const vwapAbove = stock.vwap == null || price > stock.vwap;
+    const vwapBelow = stock.vwap == null || price < stock.vwap;
+
+    const isBuy  = price > orbBufHigh && bullishCandle && hasVolumeSpike && rsiOkBuy  && vwapAbove;
+    const isSell = price < orbBufLow  && bearishCandle && hasVolumeSpike && rsiOkSell && vwapBelow;
 
     if (!isBuy && !isSell) {
       // Log why no signal (verbose only for debugging)

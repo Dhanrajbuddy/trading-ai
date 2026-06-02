@@ -57,7 +57,7 @@ function formatMessage(signal, analysis) {
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🧠 AI Confidence: *${analysis.confidence}%*\n` +
     `${confBar}\n` +
-    `💬 _${analysis.reasoning}_\n` +
+    `💬 _${analysis.reason}_\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `📋 Reasons:\n${signal.reasons.map((r) => `  • ${r}`).join('\n')}\n` +
     `⏰ ${toIST(signal.timestamp)}`

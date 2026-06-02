@@ -1,0 +1,46 @@
+{
+  "outcomes": [
+    {
+      "symbol": "GRASIM",
+      "action": "SELL",
+      "entry": 3066.8,
+      "exit": 3082.13,
+      "stopLoss": 3082.13,
+      "target": 3032.2,
+      "positionSize": 5,
+      "result": "LOSS",
+      "pnl": -76.65,
+      "signalAt": "2026-06-02T06:20:45.729Z",
+      "resolvedAt": "2026-06-02T07:15:25.581Z",
+      "date": "2026-06-02"
+    },
+    {
+      "symbol": "ICICIBANK",
+      "action": "SELL",
+      "entry": 1222.4,
+      "exit": 1228.51,
+      "stopLoss": 1228.51,
+      "target": 1210.18,
+      "positionSize": 13,
+      "result": "LOSS",
+      "pnl": -79.43,
+      "signalAt": "2026-06-02T06:16:45.623Z",
+      "resolvedAt": "2026-06-02T07:16:00.616Z",
+      "date": "2026-06-02"
+    }
+  ],
+  "symbolStats": {
+    "GRASIM": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -76.65
+    },
+    "ICICIBANK": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -79.43
+    }
+  }
+}
