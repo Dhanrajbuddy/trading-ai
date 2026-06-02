@@ -30,6 +30,7 @@ export async function placeOrder(signal) {
 }
 
 export async function fetchOrderLog() { return get('/orders/log') }
+export async function fetchStats()    { return get('/stats')      }
 
 export async function fetchLogs(type) {
   const qs = type ? `?type=${type}` : ''

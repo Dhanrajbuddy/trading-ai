@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { fetchStocks, fetchSignals, fetchTop, fetchHealth, triggerScan, placeOrder, fetchOrderLog, fetchLogs, clearLogs as apiClearLogs } from './api.js'
+import { fetchStocks, fetchSignals, fetchTop, fetchHealth, triggerScan, placeOrder, fetchOrderLog, fetchLogs, clearLogs as apiClearLogs, fetchStats } from './api.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -628,9 +628,153 @@ function DebugLogs({ logs, onClear }) {
   )
 }
 
+// ─── Stats Panel ─────────────────────────────────────────────────────────────
+
+function StatsPanel({ stats }) {
+  if (!stats) return <div className="text-center py-16 text-gray-500 text-sm">Loading performance data…</div>
+
+  const { totalTrades, wins, losses, expired, winRate, totalPnl, profitFactor, maxDrawdown, bySymbol, recentTrades } = stats
+
+  const pnlColor = totalPnl >= 0 ? 'text-green-400' : 'text-red-400'
+  const wrColor  = winRate == null ? 'text-gray-400' : winRate >= 50 ? 'text-green-400' : 'text-red-400'
+
+  return (
+    <div className="space-y-6">
+      {/* Disclaimer */}
+      <div className="bg-yellow-900/30 border border-yellow-700 rounded-xl px-4 py-3 text-xs text-yellow-300">
+        📋 <strong>Paper trading data only.</strong> These are hypothetical outcomes tracked against live prices — no real capital at risk. Confidence scores will improve as more signals accumulate (need 5+ decided trades per symbol).
+      </div>
+
+      {/* Portfolio summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="bg-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Trades</p>
+          <p className="text-2xl font-bold text-white">{totalTrades}</p>
+          <p className="text-xs text-gray-500">{wins}W · {losses}L · {expired} exp</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Win Rate</p>
+          <p className={`text-2xl font-bold ${wrColor}`}>{winRate != null ? `${winRate}%` : '—'}</p>
+          <p className="text-xs text-gray-500">decided trades only</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total P&L</p>
+          <p className={`text-2xl font-bold ${pnlColor}`}>₹{totalPnl?.toFixed(0) ?? '0'}</p>
+          <p className="text-xs text-gray-500">paper trading</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Profit Factor</p>
+          <p className={`text-2xl font-bold ${profitFactor >= 1.5 ? 'text-green-400' : profitFactor >= 1 ? 'text-yellow-400' : 'text-red-400'}`}>
+            {profitFactor != null ? profitFactor : '—'}
+          </p>
+          <p className="text-xs text-gray-500">gross profit / gross loss</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Max Drawdown</p>
+          <p className="text-2xl font-bold text-red-400">₹{maxDrawdown?.toFixed(0) ?? '0'}</p>
+          <p className="text-xs text-gray-500">peak-to-trough</p>
+        </div>
+        <div className="bg-gray-800 rounded-xl p-4">
+          <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Backtest WR</p>
+          <p className="text-2xl font-bold text-blue-400">46.7%</p>
+          <p className="text-xs text-gray-500">60-day ORB baseline</p>
+        </div>
+      </div>
+
+      {/* Symbol breakdown */}
+      {Object.keys(bySymbol).length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wide">Symbol Performance</h3>
+          <div className="overflow-x-auto rounded-xl border border-gray-700">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-800 text-gray-400 text-xs uppercase tracking-wide">
+                  <th className="px-4 py-3 text-left">Symbol</th>
+                  <th className="px-4 py-3 text-center">W</th>
+                  <th className="px-4 py-3 text-center">L</th>
+                  <th className="px-4 py-3 text-center">Exp</th>
+                  <th className="px-4 py-3 text-center">Win Rate</th>
+                  <th className="px-4 py-3 text-right">P&L</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {Object.entries(bySymbol)
+                  .sort((a, b) => (b[1].totalPnl ?? 0) - (a[1].totalPnl ?? 0))
+                  .map(([sym, s]) => (
+                  <tr key={sym} className="hover:bg-gray-800/50">
+                    <td className="px-4 py-2.5 font-bold text-white">{sym}</td>
+                    <td className="px-4 py-2.5 text-center text-green-400">{s.wins}</td>
+                    <td className="px-4 py-2.5 text-center text-red-400">{s.losses}</td>
+                    <td className="px-4 py-2.5 text-center text-gray-500">{s.expired}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      {s.winRate != null
+                        ? <span className={s.winRate >= 50 ? 'text-green-400' : 'text-red-400'}>{s.winRate}%</span>
+                        : <span className="text-gray-500">—</span>}
+                    </td>
+                    <td className={`px-4 py-2.5 text-right font-mono ${s.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      ₹{s.totalPnl?.toFixed(0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Recent trades */}
+      {recentTrades?.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wide">Recent Outcomes</h3>
+          <div className="overflow-x-auto rounded-xl border border-gray-700">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-800 text-gray-400 text-xs uppercase tracking-wide">
+                  <th className="px-4 py-3 text-left">Symbol</th>
+                  <th className="px-4 py-3 text-center">Action</th>
+                  <th className="px-4 py-3 text-right">Entry</th>
+                  <th className="px-4 py-3 text-right">Exit</th>
+                  <th className="px-4 py-3 text-center">Result</th>
+                  <th className="px-4 py-3 text-right">P&L</th>
+                  <th className="px-4 py-3 text-right">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-800">
+                {recentTrades.map((t, i) => {
+                  const icon = t.result === 'WIN' ? '✅' : t.result === 'LOSS' ? '❌' : '⏱'
+                  const pnlC = t.pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                  return (
+                    <tr key={i} className="hover:bg-gray-800/50">
+                      <td className="px-4 py-2.5 font-bold text-white">{t.symbol}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className={t.action === 'BUY' ? 'text-green-400' : 'text-red-400'}>{t.action}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-gray-300">₹{t.entry?.toFixed(2)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-gray-300">₹{t.exit?.toFixed(2)}</td>
+                      <td className="px-4 py-2.5 text-center">{icon} {t.result}</td>
+                      <td className={`px-4 py-2.5 text-right font-mono font-semibold ${pnlC}`}>₹{t.pnl?.toFixed(0)}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-500 text-xs">{t.date}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {totalTrades === 0 && (
+        <div className="text-center py-16 text-gray-500 text-sm">
+          No signals tracked yet. Stats populate automatically as signals are generated and resolved during market hours.
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main App ─────────────────────────────────────────────────────────────────────
 
-const TABS = ['Signals', 'Orders', 'Stocks', 'Top Movers', 'Debug Logs']
+const TABS = ['Signals', 'Orders', 'Stocks', 'Top Movers', 'Stats', 'Debug Logs']
 
 export default function App() {
   const [tab,          setTab]          = useState('Signals')
@@ -649,6 +793,8 @@ export default function App() {
   // Order log state
   const [orders,        setOrders]        = useState([])
   const [selectedOrder, setSelectedOrder] = useState(null)
+  // Stats state
+  const [perfStats,     setPerfStats]     = useState(null)
   // Debug logs state
   const [debugLogs,     setDebugLogs]     = useState([])
 
@@ -670,6 +816,11 @@ export default function App() {
       try {
         const log = await fetchOrderLog()
         setOrders(log.orders || [])
+      } catch (_) {}
+      // refresh stats silently
+      try {
+        const s = await fetchStats()
+        setPerfStats(s)
       } catch (_) {}
     } catch (e) {
       setError(`Cannot reach backend — ${e.message}`)
@@ -841,6 +992,7 @@ export default function App() {
         {tab === 'Orders'     && <OrdersTable orders={orders} onSelectOrder={setSelectedOrder} />}
         {tab === 'Stocks'     && <StocksTable stocks={stocks} />}
         {tab === 'Top Movers' && <TopMovers gainers={top.gainers} losers={top.losers} />}
+        {tab === 'Stats'      && <StatsPanel stats={perfStats} />}
         {tab === 'Debug Logs' && <DebugLogs logs={debugLogs} onClear={handleClearLogs} />}
         </>}
       </main>

@@ -127,6 +127,28 @@ function tickRound(price, action) {
 }
 
 /**
+ * Fetch a single order's current status from Kite by order_id.
+ * Used to detect broker-side rejections after Kite accepts the order into queue.
+ * Kite's POST /orders returns 200 + order_id immediately; the exchange may still
+ * REJECT it asynchronously (insufficient funds, invalid price, etc.).
+ * @param {string} orderId
+ * @returns {Promise<{ status: string, statusMessage: string }>}
+ */
+async function fetchOrderStatus(orderId) {
+  const res = await axios.get(`https://api.kite.trade/orders/${orderId}`, {
+    headers: kiteHeaders(),
+    timeout: 8_000,
+  });
+  // Kite returns order history as an array; last entry = current state
+  const history = res.data?.data ?? [];
+  const latest  = history[history.length - 1] ?? {};
+  return {
+    status:        latest.status         ?? 'UNKNOWN',
+    statusMessage: latest.status_message ?? latest.reason ?? '',
+  };
+}
+
+/**
  * Submit a single order to Kite and return the order_id.
  * Throws on HTTP error so callers can handle individually.
  * @param {Object} params  URLSearchParams key-value pairs
@@ -160,18 +182,19 @@ async function placeBracketOrders(symbol, mainAction, quantity, product, stopLos
 
   // ── Stop Loss (SL-M) ──────────────────────────────────────────────────────
   if (stopLoss != null) {
+    const slTrigger = tickRound(stopLoss, exitSide);
     try {
       result.slOrderId = await submitKiteOrder({
         tradingsymbol:    symbol,
         exchange:         'NSE',
         transaction_type: exitSide,
         order_type:       'SL-M',
-        trigger_price:    String(stopLoss),
+        trigger_price:    String(slTrigger),
         quantity:         String(quantity),
         product,
         validity:         'DAY',
       });
-      console.log(`[OrderService] ✅ SL order placed: ${symbol} ${exitSide} SL-M @₹${stopLoss} | orderId=${result.slOrderId}`);
+      console.log(`[OrderService] ✅ SL order placed: ${symbol} ${exitSide} SL-M @₹${slTrigger} | orderId=${result.slOrderId}`);
     } catch (err) {
       result.slError = err.response?.data?.message || err.message;
       console.error(`[OrderService] ❌ SL order failed: ${symbol} — ${result.slError}`);
@@ -180,18 +203,19 @@ async function placeBracketOrders(symbol, mainAction, quantity, product, stopLos
 
   // ── Target (LIMIT) ────────────────────────────────────────────────────────
   if (target != null) {
+    const targetPrice = tickRound(target, exitSide);
     try {
       result.targetOrderId = await submitKiteOrder({
         tradingsymbol:    symbol,
         exchange:         'NSE',
         transaction_type: exitSide,
         order_type:       'LIMIT',
-        price:            String(target),
+        price:            String(targetPrice),
         quantity:         String(quantity),
         product,
         validity:         'DAY',
       });
-      console.log(`[OrderService] ✅ Target order placed: ${symbol} ${exitSide} LIMIT @₹${target} | orderId=${result.targetOrderId}`);
+      console.log(`[OrderService] ✅ Target order placed: ${symbol} ${exitSide} LIMIT @₹${targetPrice} | orderId=${result.targetOrderId}`);
     } catch (err) {
       result.targetError = err.response?.data?.message || err.message;
       console.error(`[OrderService] ❌ Target order failed: ${symbol} — ${result.targetError}`);
@@ -339,10 +363,30 @@ async function placeOrder(signal) {
       validity:         'DAY',
     });
 
-    // Update daily state
+    // ── Poll broker-side status (Kite is async — exchange may reject) ──────
+    // The POST above returns 200 + order_id even if the exchange will reject it
+    // (e.g. insufficient funds). Wait 2s then verify actual order status.
+    await new Promise((r) => setTimeout(r, 2000));
+    let brokerStatus = { status: 'OPEN', statusMessage: '' };
+    try {
+      brokerStatus = await fetchOrderStatus(entryOrderId);
+    } catch (pollErr) {
+      console.warn(`[OrderService] Could not verify order status: ${pollErr.message} — assuming accepted`);
+    }
+
+    if (brokerStatus.status === 'REJECTED') {
+      const reason = brokerStatus.statusMessage || 'Order rejected by exchange.';
+      console.error(`[OrderService] ❌ Entry REJECTED by Zerodha: ${symbol} | ${reason}`);
+      const failedResult = { status: 'FAILED', reason, symbol, action };
+      logOrder({ ...baseLog, status: 'FAILED', reason });
+      sendOrderAlert(failedResult, signal).catch(() => {});
+      return failedResult;
+    }
+
+    // Update daily counters only after confirmed non-rejection
     _state.dailyCount += 1;
     _state.tradedToday.add(symbol);
-    console.log(`[OrderService] ✅ Entry order placed: ${symbol} ${action} LIMIT ₹${limitPrice} | orderId=${entryOrderId}`);
+    console.log(`[OrderService] ✅ Entry placed: ${symbol} ${action} LIMIT ₹${limitPrice} | orderId=${entryOrderId} | brokerStatus=${brokerStatus.status}`);
 
     // ── Place bracket orders (SL + Target) ───────────────────────────────────
     const bracket = await placeBracketOrders(

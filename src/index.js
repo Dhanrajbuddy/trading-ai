@@ -32,6 +32,7 @@ const { placeOrder, getDailyState, getOrderLog, monitorOrders, getOcoTrades } = 
 const { runScanners }         = require('./scanners/marketScanner');
 const { generateSignals }     = require('./strategies/signalEngine');
 const { analyzeSignal }       = require('./services/aiAnalyzer');
+const { trackSignal, updatePrices, getPortfolioStats } = require('./services/signalTracker');
 const { sendAlert, sendMarketAlert }   = require('./alerts/telegramAlert');
 const { processSignal, getAutoTradeState } = require('./services/autoTrader');
 const { refreshIfStale, forceRefresh, getUniverseState } = require('./services/stockUniverse');
@@ -85,7 +86,10 @@ async function runPipeline() {
   }
   latestStocks = stocks;
 
-  // 1a. Dynamic stock selection — refresh every 5 min (force on very first run)
+  // 1a. Feed latest prices into signal tracker to resolve open signals
+  updatePrices(stocks);
+
+  // 1b. Dynamic stock selection — refresh every 5 min (force on very first run)
   if (latestStocks.length > 0) {
     refreshIfStale(stocks);   // no-op if cache is still fresh
   }
@@ -109,9 +113,10 @@ async function runPipeline() {
     return;
   }
 
-  // 4. AI enrich + Telegram
+  // 4. AI enrich + Telegram + track for outcome recording
   const enriched = [];
   for (const signal of signals) {
+    trackSignal(signal); // register before enrichment so tracker has the raw signal
     const analysis = await analyzeSignal(signal);
     console.log(`[AI] ${signal.symbol} ${signal.action} — ${analysis.confidence}% (${analysis.source})`);
     await sendAlert(signal, analysis);
@@ -256,6 +261,11 @@ app.get('/orders/state', (_req, res) => {
 // GET /orders/oco  — active OCO trades being monitored
 app.get('/orders/oco', (_req, res) => {
   res.json({ trades: getOcoTrades() });
+});
+
+// GET /stats — paper trading performance metrics
+app.get('/stats', (_req, res) => {
+  res.json(getPortfolioStats());
 });
 
 // GET /orders/auto  — auto-trader state (daily counts, flag, settings)
