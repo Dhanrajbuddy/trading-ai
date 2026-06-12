@@ -1,0 +1,840 @@
+{
+  "comparison_2026-04-13_2026-06-12_1781274645943": {
+    "runAt": "2026-06-12T14:30:45.943Z",
+    "type": "A_B_comparison",
+    "fromDate": "2026-04-13",
+    "toDate": "2026-06-12",
+    "days": 60,
+    "symbols": [
+      "RELIANCE",
+      "TCS",
+      "INFY",
+      "HDFCBANK",
+      "ICICIBANK",
+      "SBIN",
+      "KOTAKBANK",
+      "LT",
+      "AXISBANK",
+      "WIPRO",
+      "TITAN",
+      "MARUTI",
+      "SUNPHARMA",
+      "TATASTEEL",
+      "ADANIPORTS",
+      "HCLTECH",
+      "BAJFINANCE",
+      "ONGC",
+      "BHARTIARTL",
+      "TECHM"
+    ],
+    "fetched": 20,
+    "failed": 0,
+    "A": {
+      "config": {
+        "MIN_CONFIDENCE": 60,
+        "ORB_MIN_RANGE_PCT": 0,
+        "BULL_MARKET_THRESHOLD": 0
+      },
+      "trades": 181,
+      "wins": 44,
+      "losses": 137,
+      "winRate": 24.3,
+      "netPnL": -8042.56,
+      "totalCosts": 0,
+      "profitFactor": 0.34,
+      "avgRR": 1.01,
+      "maxDrawdown": -8192.07,
+      "tradesPerDay": 4.22,
+      "buys": 99,
+      "sells": 82,
+      "buyWR": 29.3,
+      "sellWR": 18.3
+    },
+    "B": {
+      "config": {
+        "MIN_CONFIDENCE": 68,
+        "ORB_MIN_RANGE_PCT": 0.3,
+        "BULL_MARKET_THRESHOLD": 0.55
+      },
+      "trades": 159,
+      "wins": 40,
+      "losses": 119,
+      "winRate": 25.2,
+      "netPnL": -6667.9,
+      "totalCosts": 0,
+      "profitFactor": 0.36,
+      "avgRR": 1.01,
+      "maxDrawdown": -6945.97,
+      "tradesPerDay": 3.71,
+      "buys": 97,
+      "sells": 62,
+      "buyWR": 28.9,
+      "sellWR": 19.4
+    },
+    "symbolSummary": [
+      {
+        "symbol": "RELIANCE",
+        "candleCount": 1050,
+        "A": {
+          "trades": 21,
+          "winRate": 28.6,
+          "pnl": -410.54
+        },
+        "B": {
+          "trades": 18,
+          "winRate": 33.3,
+          "pnl": -154.25
+        }
+      },
+      {
+        "symbol": "TCS",
+        "candleCount": 1050,
+        "A": {
+          "trades": 5,
+          "winRate": 20,
+          "pnl": -313.28
+        },
+        "B": {
+          "trades": 5,
+          "winRate": 20,
+          "pnl": -313.28
+        }
+      },
+      {
+        "symbol": "INFY",
+        "candleCount": 1050,
+        "A": {
+          "trades": 8,
+          "winRate": 12.5,
+          "pnl": -453.26
+        },
+        "B": {
+          "trades": 8,
+          "winRate": 12.5,
+          "pnl": -453.26
+        }
+      },
+      {
+        "symbol": "HDFCBANK",
+        "candleCount": 1050,
+        "A": {
+          "trades": 12,
+          "winRate": 25,
+          "pnl": -451.32
+        },
+        "B": {
+          "trades": 12,
+          "winRate": 25,
+          "pnl": -451.32
+        }
+      },
+      {
+        "symbol": "ICICIBANK",
+        "candleCount": 1050,
+        "A": {
+          "trades": 11,
+          "winRate": 27.3,
+          "pnl": -461.96
+        },
+        "B": {
+          "trades": 9,
+          "winRate": 22.2,
+          "pnl": -425
+        }
+      },
+      {
+        "symbol": "SBIN",
+        "candleCount": 1050,
+        "A": {
+          "trades": 10,
+          "winRate": 20,
+          "pnl": -548.14
+        },
+        "B": {
+          "trades": 6,
+          "winRate": 33.3,
+          "pnl": -108.49
+        }
+      },
+      {
+        "symbol": "KOTAKBANK",
+        "candleCount": 1050,
+        "A": {
+          "trades": 11,
+          "winRate": 18.2,
+          "pnl": -769.7
+        },
+        "B": {
+          "trades": 11,
+          "winRate": 18.2,
+          "pnl": -769.7
+        }
+      },
+      {
+        "symbol": "LT",
+        "candleCount": 1050,
+        "A": {
+          "trades": 8,
+          "winRate": 25,
+          "pnl": -522.98
+        },
+        "B": {
+          "trades": 8,
+          "winRate": 25,
+          "pnl": -522.98
+        }
+      },
+      {
+        "symbol": "AXISBANK",
+        "candleCount": 1050,
+        "A": {
+          "trades": 8,
+          "winRate": 25,
+          "pnl": -493.48
+        },
+        "B": {
+          "trades": 8,
+          "winRate": 25,
+          "pnl": -493.48
+        }
+      },
+      {
+        "symbol": "WIPRO",
+        "candleCount": 1050,
+        "A": {
+          "trades": 5,
+          "winRate": 0,
+          "pnl": -384.96
+        },
+        "B": {
+          "trades": 5,
+          "winRate": 0,
+          "pnl": -384.96
+        }
+      },
+      {
+        "symbol": "TITAN",
+        "candleCount": 1050,
+        "A": {
+          "trades": 13,
+          "winRate": 15.4,
+          "pnl": -543.88
+        },
+        "B": {
+          "trades": 11,
+          "winRate": 18.2,
+          "pnl": -357.97
+        }
+      },
+      {
+        "symbol": "MARUTI",
+        "candleCount": 1050,
+        "A": {
+          "trades": 5,
+          "winRate": 40,
+          "pnl": -172.54
+        },
+        "B": {
+          "trades": 4,
+          "winRate": 25,
+          "pnl": -236.03
+        }
+      },
+      {
+        "symbol": "SUNPHARMA",
+        "candleCount": 1050,
+        "A": {
+          "trades": 9,
+          "winRate": 33.3,
+          "pnl": -161.54
+        },
+        "B": {
+          "trades": 7,
+          "winRate": 28.6,
+          "pnl": -164.84
+        }
+      },
+      {
+        "symbol": "TATASTEEL",
+        "candleCount": 1050,
+        "A": {
+          "trades": 4,
+          "winRate": 25,
+          "pnl": -304.23
+        },
+        "B": {
+          "trades": 4,
+          "winRate": 25,
+          "pnl": -304.23
+        }
+      },
+      {
+        "symbol": "ADANIPORTS",
+        "candleCount": 1050,
+        "A": {
+          "trades": 12,
+          "winRate": 25,
+          "pnl": -825.71
+        },
+        "B": {
+          "trades": 10,
+          "winRate": 30,
+          "pnl": -581.61
+        }
+      },
+      {
+        "symbol": "HCLTECH",
+        "candleCount": 1050,
+        "A": {
+          "trades": 2,
+          "winRate": 50,
+          "pnl": 59.04
+        },
+        "B": {
+          "trades": 1,
+          "winRate": 100,
+          "pnl": 104.91
+        }
+      },
+      {
+        "symbol": "BAJFINANCE",
+        "candleCount": 1050,
+        "A": {
+          "trades": 11,
+          "winRate": 45.5,
+          "pnl": 197.17
+        },
+        "B": {
+          "trades": 9,
+          "winRate": 44.4,
+          "pnl": 209.78
+        }
+      },
+      {
+        "symbol": "ONGC",
+        "candleCount": 1050,
+        "A": {
+          "trades": 9,
+          "winRate": 33.3,
+          "pnl": -354.95
+        },
+        "B": {
+          "trades": 8,
+          "winRate": 37.5,
+          "pnl": -274.13
+        }
+      },
+      {
+        "symbol": "BHARTIARTL",
+        "candleCount": 1050,
+        "A": {
+          "trades": 13,
+          "winRate": 15.4,
+          "pnl": -646.38
+        },
+        "B": {
+          "trades": 11,
+          "winRate": 18.2,
+          "pnl": -507.14
+        }
+      },
+      {
+        "symbol": "TECHM",
+        "candleCount": 1050,
+        "A": {
+          "trades": 4,
+          "winRate": 0,
+          "pnl": -479.92
+        },
+        "B": {
+          "trades": 4,
+          "winRate": 0,
+          "pnl": -479.92
+        }
+      }
+    ],
+    "topSymbols": [
+      {
+        "symbol": "BAJFINANCE",
+        "trades": 9,
+        "winRate": 44.4,
+        "netPnL": 209.78
+      },
+      {
+        "symbol": "HCLTECH",
+        "trades": 1,
+        "winRate": 100,
+        "netPnL": 104.91
+      },
+      {
+        "symbol": "SBIN",
+        "trades": 6,
+        "winRate": 33.3,
+        "netPnL": -108.49
+      },
+      {
+        "symbol": "RELIANCE",
+        "trades": 18,
+        "winRate": 33.3,
+        "netPnL": -154.25
+      },
+      {
+        "symbol": "SUNPHARMA",
+        "trades": 7,
+        "winRate": 28.6,
+        "netPnL": -164.84
+      }
+    ],
+    "worstSymbols": [
+      {
+        "symbol": "KOTAKBANK",
+        "trades": 11,
+        "winRate": 18.2,
+        "netPnL": -769.7
+      },
+      {
+        "symbol": "ADANIPORTS",
+        "trades": 10,
+        "winRate": 30,
+        "netPnL": -581.61
+      },
+      {
+        "symbol": "LT",
+        "trades": 8,
+        "winRate": 25,
+        "netPnL": -522.98
+      },
+      {
+        "symbol": "BHARTIARTL",
+        "trades": 11,
+        "winRate": 18.2,
+        "netPnL": -507.14
+      },
+      {
+        "symbol": "AXISBANK",
+        "trades": 8,
+        "winRate": 25,
+        "netPnL": -493.48
+      }
+    ]
+  },
+  "comparison_2026-04-13_2026-06-12_1781274675518": {
+    "runAt": "2026-06-12T14:31:15.518Z",
+    "type": "A_B_comparison",
+    "fromDate": "2026-04-13",
+    "toDate": "2026-06-12",
+    "days": 60,
+    "symbols": [
+      "RELIANCE",
+      "TCS",
+      "INFY",
+      "HDFCBANK",
+      "ICICIBANK",
+      "SBIN",
+      "KOTAKBANK",
+      "LT",
+      "AXISBANK",
+      "WIPRO",
+      "TITAN",
+      "MARUTI",
+      "SUNPHARMA",
+      "TATASTEEL",
+      "ADANIPORTS",
+      "HCLTECH",
+      "BAJFINANCE",
+      "ONGC",
+      "BHARTIARTL",
+      "TECHM"
+    ],
+    "fetched": 20,
+    "failed": 0,
+    "A": {
+      "config": {
+        "MIN_CONFIDENCE": 60,
+        "ORB_MIN_RANGE_PCT": 0,
+        "BULL_MARKET_THRESHOLD": 0
+      },
+      "trades": 181,
+      "wins": 44,
+      "losses": 137,
+      "winRate": 24.3,
+      "netPnL": -8042.56,
+      "totalCosts": 0,
+      "profitFactor": 0.34,
+      "avgRR": 1.01,
+      "maxDrawdown": -8192.07,
+      "tradesPerDay": 4.22,
+      "buys": 99,
+      "sells": 82,
+      "buyWR": 29.3,
+      "sellWR": 18.3
+    },
+    "B": {
+      "config": {
+        "MIN_CONFIDENCE": 68,
+        "ORB_MIN_RANGE_PCT": 0.3,
+        "BULL_MARKET_THRESHOLD": 0.55
+      },
+      "trades": 159,
+      "wins": 40,
+      "losses": 119,
+      "winRate": 25.2,
+      "netPnL": -6667.9,
+      "totalCosts": 0,
+      "profitFactor": 0.36,
+      "avgRR": 1.01,
+      "maxDrawdown": -6945.97,
+      "tradesPerDay": 3.71,
+      "buys": 97,
+      "sells": 62,
+      "buyWR": 28.9,
+      "sellWR": 19.4
+    },
+    "symbolSummary": [
+      {
+        "symbol": "RELIANCE",
+        "candleCount": 1050,
+        "A": {
+          "trades": 21,
+          "winRate": 28.6,
+          "pnl": -410.54
+        },
+        "B": {
+          "trades": 18,
+          "winRate": 33.3,
+          "pnl": -154.25
+        }
+      },
+      {
+        "symbol": "TCS",
+        "candleCount": 1050,
+        "A": {
+          "trades": 5,
+          "winRate": 20,
+          "pnl": -313.28
+        },
+        "B": {
+          "trades": 5,
+          "winRate": 20,
+          "pnl": -313.28
+        }
+      },
+      {
+        "symbol": "INFY",
+        "candleCount": 1050,
+        "A": {
+          "trades": 8,
+          "winRate": 12.5,
+          "pnl": -453.26
+        },
+        "B": {
+          "trades": 8,
+          "winRate": 12.5,
+          "pnl": -453.26
+        }
+      },
+      {
+        "symbol": "HDFCBANK",
+        "candleCount": 1050,
+        "A": {
+          "trades": 12,
+          "winRate": 25,
+          "pnl": -451.32
+        },
+        "B": {
+          "trades": 12,
+          "winRate": 25,
+          "pnl": -451.32
+        }
+      },
+      {
+        "symbol": "ICICIBANK",
+        "candleCount": 1050,
+        "A": {
+          "trades": 11,
+          "winRate": 27.3,
+          "pnl": -461.96
+        },
+        "B": {
+          "trades": 9,
+          "winRate": 22.2,
+          "pnl": -425
+        }
+      },
+      {
+        "symbol": "SBIN",
+        "candleCount": 1050,
+        "A": {
+          "trades": 10,
+          "winRate": 20,
+          "pnl": -548.14
+        },
+        "B": {
+          "trades": 6,
+          "winRate": 33.3,
+          "pnl": -108.49
+        }
+      },
+      {
+        "symbol": "KOTAKBANK",
+        "candleCount": 1050,
+        "A": {
+          "trades": 11,
+          "winRate": 18.2,
+          "pnl": -769.7
+        },
+        "B": {
+          "trades": 11,
+          "winRate": 18.2,
+          "pnl": -769.7
+        }
+      },
+      {
+        "symbol": "LT",
+        "candleCount": 1050,
+        "A": {
+          "trades": 8,
+          "winRate": 25,
+          "pnl": -522.98
+        },
+        "B": {
+          "trades": 8,
+          "winRate": 25,
+          "pnl": -522.98
+        }
+      },
+      {
+        "symbol": "AXISBANK",
+        "candleCount": 1050,
+        "A": {
+          "trades": 8,
+          "winRate": 25,
+          "pnl": -493.48
+        },
+        "B": {
+          "trades": 8,
+          "winRate": 25,
+          "pnl": -493.48
+        }
+      },
+      {
+        "symbol": "WIPRO",
+        "candleCount": 1050,
+        "A": {
+          "trades": 5,
+          "winRate": 0,
+          "pnl": -384.96
+        },
+        "B": {
+          "trades": 5,
+          "winRate": 0,
+          "pnl": -384.96
+        }
+      },
+      {
+        "symbol": "TITAN",
+        "candleCount": 1050,
+        "A": {
+          "trades": 13,
+          "winRate": 15.4,
+          "pnl": -543.88
+        },
+        "B": {
+          "trades": 11,
+          "winRate": 18.2,
+          "pnl": -357.97
+        }
+      },
+      {
+        "symbol": "MARUTI",
+        "candleCount": 1050,
+        "A": {
+          "trades": 5,
+          "winRate": 40,
+          "pnl": -172.54
+        },
+        "B": {
+          "trades": 4,
+          "winRate": 25,
+          "pnl": -236.03
+        }
+      },
+      {
+        "symbol": "SUNPHARMA",
+        "candleCount": 1050,
+        "A": {
+          "trades": 9,
+          "winRate": 33.3,
+          "pnl": -161.54
+        },
+        "B": {
+          "trades": 7,
+          "winRate": 28.6,
+          "pnl": -164.84
+        }
+      },
+      {
+        "symbol": "TATASTEEL",
+        "candleCount": 1050,
+        "A": {
+          "trades": 4,
+          "winRate": 25,
+          "pnl": -304.23
+        },
+        "B": {
+          "trades": 4,
+          "winRate": 25,
+          "pnl": -304.23
+        }
+      },
+      {
+        "symbol": "ADANIPORTS",
+        "candleCount": 1050,
+        "A": {
+          "trades": 12,
+          "winRate": 25,
+          "pnl": -825.71
+        },
+        "B": {
+          "trades": 10,
+          "winRate": 30,
+          "pnl": -581.61
+        }
+      },
+      {
+        "symbol": "HCLTECH",
+        "candleCount": 1050,
+        "A": {
+          "trades": 2,
+          "winRate": 50,
+          "pnl": 59.04
+        },
+        "B": {
+          "trades": 1,
+          "winRate": 100,
+          "pnl": 104.91
+        }
+      },
+      {
+        "symbol": "BAJFINANCE",
+        "candleCount": 1050,
+        "A": {
+          "trades": 11,
+          "winRate": 45.5,
+          "pnl": 197.17
+        },
+        "B": {
+          "trades": 9,
+          "winRate": 44.4,
+          "pnl": 209.78
+        }
+      },
+      {
+        "symbol": "ONGC",
+        "candleCount": 1050,
+        "A": {
+          "trades": 9,
+          "winRate": 33.3,
+          "pnl": -354.95
+        },
+        "B": {
+          "trades": 8,
+          "winRate": 37.5,
+          "pnl": -274.13
+        }
+      },
+      {
+        "symbol": "BHARTIARTL",
+        "candleCount": 1050,
+        "A": {
+          "trades": 13,
+          "winRate": 15.4,
+          "pnl": -646.38
+        },
+        "B": {
+          "trades": 11,
+          "winRate": 18.2,
+          "pnl": -507.14
+        }
+      },
+      {
+        "symbol": "TECHM",
+        "candleCount": 1050,
+        "A": {
+          "trades": 4,
+          "winRate": 0,
+          "pnl": -479.92
+        },
+        "B": {
+          "trades": 4,
+          "winRate": 0,
+          "pnl": -479.92
+        }
+      }
+    ],
+    "topSymbols": [
+      {
+        "symbol": "BAJFINANCE",
+        "trades": 9,
+        "winRate": 44.4,
+        "netPnL": 209.78
+      },
+      {
+        "symbol": "HCLTECH",
+        "trades": 1,
+        "winRate": 100,
+        "netPnL": 104.91
+      },
+      {
+        "symbol": "SBIN",
+        "trades": 6,
+        "winRate": 33.3,
+        "netPnL": -108.49
+      },
+      {
+        "symbol": "RELIANCE",
+        "trades": 18,
+        "winRate": 33.3,
+        "netPnL": -154.25
+      },
+      {
+        "symbol": "SUNPHARMA",
+        "trades": 7,
+        "winRate": 28.6,
+        "netPnL": -164.84
+      }
+    ],
+    "worstSymbols": [
+      {
+        "symbol": "KOTAKBANK",
+        "trades": 11,
+        "winRate": 18.2,
+        "netPnL": -769.7
+      },
+      {
+        "symbol": "ADANIPORTS",
+        "trades": 10,
+        "winRate": 30,
+        "netPnL": -581.61
+      },
+      {
+        "symbol": "LT",
+        "trades": 8,
+        "winRate": 25,
+        "netPnL": -522.98
+      },
+      {
+        "symbol": "BHARTIARTL",
+        "trades": 11,
+        "winRate": 18.2,
+        "netPnL": -507.14
+      },
+      {
+        "symbol": "AXISBANK",
+        "trades": 8,
+        "winRate": 25,
+        "netPnL": -493.48
+      }
+    ]
+  }
+}
