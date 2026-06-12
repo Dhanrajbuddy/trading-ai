@@ -27,6 +27,384 @@
       "signalAt": "2026-06-02T06:16:45.623Z",
       "resolvedAt": "2026-06-02T07:16:00.616Z",
       "date": "2026-06-02"
+    },
+    {
+      "symbol": "NTPC",
+      "action": "BUY",
+      "entry": 368.5,
+      "exit": 366.66,
+      "stopLoss": 366.66,
+      "target": 372.19,
+      "positionSize": 43,
+      "result": "LOSS",
+      "pnl": -79.12,
+      "signalAt": "2026-06-02T08:38:46.001Z",
+      "resolvedAt": "2026-06-02T09:30:20.732Z",
+      "date": "2026-06-02"
+    },
+    {
+      "symbol": "POWERGRID",
+      "action": "BUY",
+      "entry": 282.7,
+      "exit": 282.15,
+      "stopLoss": 281.29,
+      "target": 285.9,
+      "positionSize": 56,
+      "result": "EXPIRED",
+      "pnl": -30.8,
+      "signalAt": "2026-06-02T08:39:16.184Z",
+      "resolvedAt": "2026-06-02T09:45:00.693Z",
+      "date": "2026-06-02"
+    },
+    {
+      "symbol": "DIVISLAB",
+      "action": "BUY",
+      "entry": 6491,
+      "exit": 6529.5,
+      "stopLoss": 6458.55,
+      "target": 6555.91,
+      "positionSize": 2,
+      "result": "EXPIRED",
+      "pnl": 77,
+      "signalAt": "2026-06-02T08:40:25.283Z",
+      "resolvedAt": "2026-06-02T09:45:00.694Z",
+      "date": "2026-06-02"
+    },
+    {
+      "symbol": "WIPRO",
+      "action": "SELL",
+      "entry": 205.26,
+      "exit": 206.29,
+      "stopLoss": 206.29,
+      "target": 202.34,
+      "positionSize": 77,
+      "result": "LOSS",
+      "pnl": -79.31,
+      "signalAt": "2026-06-03T05:22:05.426Z",
+      "resolvedAt": "2026-06-03T05:26:10.947Z",
+      "date": "2026-06-03"
+    },
+    {
+      "symbol": "INDUSINDBK",
+      "action": "SELL",
+      "entry": 884.5,
+      "exit": 888.92,
+      "stopLoss": 888.92,
+      "target": 868.9,
+      "positionSize": 18,
+      "result": "LOSS",
+      "pnl": -79.56,
+      "signalAt": "2026-06-03T05:24:00.761Z",
+      "resolvedAt": "2026-06-03T05:53:00.764Z",
+      "date": "2026-06-03"
+    },
+    {
+      "symbol": "TRENT",
+      "action": "BUY",
+      "entry": 4235,
+      "exit": 4213.82,
+      "stopLoss": 4213.82,
+      "target": 4277.35,
+      "positionSize": 3,
+      "result": "LOSS",
+      "pnl": -63.54,
+      "signalAt": "2026-06-03T05:22:50.059Z",
+      "resolvedAt": "2026-06-03T06:29:55.293Z",
+      "date": "2026-06-03"
+    },
+    {
+      "symbol": "ICICIBANK",
+      "action": "BUY",
+      "entry": 1254.9,
+      "exit": 1248.63,
+      "stopLoss": 1248.63,
+      "target": 1267.45,
+      "positionSize": 12,
+      "result": "LOSS",
+      "pnl": -75.24,
+      "signalAt": "2026-06-04T05:17:00.531Z",
+      "resolvedAt": "2026-06-04T05:36:40.384Z",
+      "date": "2026-06-04"
+    },
+    {
+      "symbol": "COALINDIA",
+      "action": "BUY",
+      "entry": 476.45,
+      "exit": 481.21,
+      "stopLoss": 474.07,
+      "target": 481.21,
+      "positionSize": 33,
+      "result": "WIN",
+      "pnl": 157.08,
+      "signalAt": "2026-06-04T05:23:35.959Z",
+      "resolvedAt": "2026-06-04T05:58:30.323Z",
+      "date": "2026-06-04"
+    },
+    {
+      "symbol": "BPCL",
+      "action": "BUY",
+      "entry": 295.4,
+      "exit": 293.92,
+      "stopLoss": 293.92,
+      "target": 298.35,
+      "positionSize": 54,
+      "result": "LOSS",
+      "pnl": -79.92,
+      "signalAt": "2026-06-04T05:16:15.293Z",
+      "resolvedAt": "2026-06-04T06:32:01.168Z",
+      "date": "2026-06-04"
+    },
+    {
+      "symbol": "ITC",
+      "action": "SELL",
+      "entry": 278,
+      "exit": 279.39,
+      "stopLoss": 279.39,
+      "target": 275.22,
+      "positionSize": 57,
+      "result": "LOSS",
+      "pnl": -79.23,
+      "signalAt": "2026-06-05T05:23:10.969Z",
+      "resolvedAt": "2026-06-05T05:35:50.282Z",
+      "date": "2026-06-05"
+    },
+    {
+      "symbol": "NTPC",
+      "action": "SELL",
+      "entry": 362.7,
+      "exit": 361.95,
+      "stopLoss": 364.51,
+      "target": 354.2,
+      "positionSize": 44,
+      "result": "EXPIRED",
+      "pnl": 33,
+      "signalAt": "2026-06-05T05:29:20.638Z",
+      "resolvedAt": "2026-06-05T09:45:00.255Z",
+      "date": "2026-06-05"
+    },
+    {
+      "symbol": "ADANIPORTS",
+      "action": "BUY",
+      "entry": 1816.9,
+      "exit": 1823.4,
+      "stopLoss": 1807.82,
+      "target": 1837.5,
+      "positionSize": 8,
+      "result": "EXPIRED",
+      "pnl": 52,
+      "signalAt": "2026-06-05T05:31:05.814Z",
+      "resolvedAt": "2026-06-05T09:45:00.256Z",
+      "date": "2026-06-05"
+    },
+    {
+      "symbol": "MARUTI",
+      "action": "BUY",
+      "entry": 13029,
+      "exit": 12963.85,
+      "stopLoss": 12963.85,
+      "target": 13159.29,
+      "positionSize": 1,
+      "result": "LOSS",
+      "pnl": -65.15,
+      "signalAt": "2026-06-08T06:25:01.104Z",
+      "resolvedAt": "2026-06-08T08:12:20.513Z",
+      "date": "2026-06-08"
+    },
+    {
+      "symbol": "TITAN",
+      "action": "SELL",
+      "entry": 4201.5,
+      "exit": 4200,
+      "stopLoss": 4222.51,
+      "target": 4159.48,
+      "positionSize": 3,
+      "result": "EXPIRED",
+      "pnl": 4.5,
+      "signalAt": "2026-06-08T06:20:55.783Z",
+      "resolvedAt": "2026-06-08T09:45:00.152Z",
+      "date": "2026-06-08"
+    },
+    {
+      "symbol": "TATASTEEL",
+      "action": "SELL",
+      "entry": 203.65,
+      "exit": 202.86,
+      "stopLoss": 204.67,
+      "target": 201.61,
+      "positionSize": 78,
+      "result": "EXPIRED",
+      "pnl": 61.62,
+      "signalAt": "2026-06-08T06:23:00.219Z",
+      "resolvedAt": "2026-06-08T09:45:00.165Z",
+      "date": "2026-06-08"
+    },
+    {
+      "symbol": "ASIANPAINT",
+      "action": "BUY",
+      "entry": 2696.6,
+      "exit": 2709.2,
+      "stopLoss": 2683.12,
+      "target": 2723.57,
+      "positionSize": 5,
+      "result": "EXPIRED",
+      "pnl": 63,
+      "signalAt": "2026-06-09T06:52:25.276Z",
+      "resolvedAt": "2026-06-09T09:45:00.839Z",
+      "date": "2026-06-09"
+    },
+    {
+      "symbol": "DRREDDY",
+      "action": "SELL",
+      "entry": 1272.6,
+      "exit": 1270.1,
+      "stopLoss": 1278.96,
+      "target": 1259.87,
+      "positionSize": 12,
+      "result": "EXPIRED",
+      "pnl": 30,
+      "signalAt": "2026-06-09T06:54:20.336Z",
+      "resolvedAt": "2026-06-09T09:45:00.851Z",
+      "date": "2026-06-09"
+    },
+    {
+      "symbol": "NESTLEIND",
+      "action": "BUY",
+      "entry": 1406.6,
+      "exit": 1410.6,
+      "stopLoss": 1399.57,
+      "target": 1420.67,
+      "positionSize": 11,
+      "result": "EXPIRED",
+      "pnl": 44,
+      "signalAt": "2026-06-09T06:55:00.313Z",
+      "resolvedAt": "2026-06-09T09:45:00.852Z",
+      "date": "2026-06-09"
+    },
+    {
+      "symbol": "EICHERMOT",
+      "action": "BUY",
+      "entry": 7248.5,
+      "exit": 7212.26,
+      "stopLoss": 7212.26,
+      "target": 7320.98,
+      "positionSize": 2,
+      "result": "LOSS",
+      "pnl": -72.48,
+      "signalAt": "2026-06-10T05:05:15.681Z",
+      "resolvedAt": "2026-06-10T05:18:45.483Z",
+      "date": "2026-06-10"
+    },
+    {
+      "symbol": "ADANIENT",
+      "action": "BUY",
+      "entry": 2980.7,
+      "exit": 2965.8,
+      "stopLoss": 2965.8,
+      "target": 3011.5,
+      "positionSize": 5,
+      "result": "LOSS",
+      "pnl": -74.5,
+      "signalAt": "2026-06-10T05:00:55.595Z",
+      "resolvedAt": "2026-06-10T07:13:50.303Z",
+      "date": "2026-06-10"
+    },
+    {
+      "symbol": "SBIN",
+      "action": "BUY",
+      "entry": 1010.35,
+      "exit": 1005.3,
+      "stopLoss": 1005.3,
+      "target": 1020.45,
+      "positionSize": 15,
+      "result": "LOSS",
+      "pnl": -75.75,
+      "signalAt": "2026-06-10T05:05:50.830Z",
+      "resolvedAt": "2026-06-10T08:40:50.375Z",
+      "date": "2026-06-10"
+    },
+    {
+      "symbol": "TRENT",
+      "action": "SELL",
+      "entry": 2693.5,
+      "exit": 2706.97,
+      "stopLoss": 2706.97,
+      "target": 2666.57,
+      "positionSize": 5,
+      "result": "LOSS",
+      "pnl": -67.35,
+      "signalAt": "2026-06-11T05:23:40.633Z",
+      "resolvedAt": "2026-06-11T05:57:50.869Z",
+      "date": "2026-06-11"
+    },
+    {
+      "symbol": "LT",
+      "action": "SELL",
+      "entry": 3869.9,
+      "exit": 3889.25,
+      "stopLoss": 3889.25,
+      "target": 3831.2,
+      "positionSize": 4,
+      "result": "LOSS",
+      "pnl": -77.4,
+      "signalAt": "2026-06-11T05:22:51.534Z",
+      "resolvedAt": "2026-06-11T06:25:15.681Z",
+      "date": "2026-06-11"
+    },
+    {
+      "symbol": "SHRIRAMFIN",
+      "action": "SELL",
+      "entry": 885.5,
+      "exit": 889.93,
+      "stopLoss": 889.93,
+      "target": 876.2,
+      "positionSize": 18,
+      "result": "LOSS",
+      "pnl": -79.74,
+      "signalAt": "2026-06-11T05:22:56.246Z",
+      "resolvedAt": "2026-06-11T06:32:36.050Z",
+      "date": "2026-06-11"
+    },
+    {
+      "symbol": "HINDUNILVR",
+      "action": "SELL",
+      "entry": 2148.9,
+      "exit": 2159.64,
+      "stopLoss": 2159.64,
+      "target": 2126.7,
+      "positionSize": 7,
+      "result": "LOSS",
+      "pnl": -75.18,
+      "signalAt": "2026-06-12T04:48:25.297Z",
+      "resolvedAt": "2026-06-12T06:40:30.962Z",
+      "date": "2026-06-12"
+    },
+    {
+      "symbol": "NESTLEIND",
+      "action": "SELL",
+      "entry": 1411.8,
+      "exit": 1418.86,
+      "stopLoss": 1418.86,
+      "target": 1397.68,
+      "positionSize": 11,
+      "result": "LOSS",
+      "pnl": -77.66,
+      "signalAt": "2026-06-12T04:48:25.297Z",
+      "resolvedAt": "2026-06-12T07:05:50.976Z",
+      "date": "2026-06-12"
+    },
+    {
+      "symbol": "INFY",
+      "action": "BUY",
+      "entry": 1117.3,
+      "exit": 1116,
+      "stopLoss": 1111.71,
+      "target": 1128.47,
+      "positionSize": 14,
+      "result": "EXPIRED",
+      "pnl": -18.2,
+      "signalAt": "2026-06-12T04:53:41.051Z",
+      "resolvedAt": "2026-06-12T09:45:00.705Z",
+      "date": "2026-06-12"
     }
   ],
   "symbolStats": {
@@ -38,9 +416,147 @@
     },
     "ICICIBANK": {
       "wins": 0,
+      "losses": 2,
+      "expired": 0,
+      "totalPnl": -154.67000000000002
+    },
+    "NTPC": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 1,
+      "totalPnl": -46.120000000000005
+    },
+    "POWERGRID": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": -30.8
+    },
+    "DIVISLAB": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": 77
+    },
+    "WIPRO": {
+      "wins": 0,
       "losses": 1,
       "expired": 0,
-      "totalPnl": -79.43
+      "totalPnl": -79.31
+    },
+    "INDUSINDBK": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -79.56
+    },
+    "TRENT": {
+      "wins": 0,
+      "losses": 2,
+      "expired": 0,
+      "totalPnl": -130.89
+    },
+    "COALINDIA": {
+      "wins": 1,
+      "losses": 0,
+      "expired": 0,
+      "totalPnl": 157.08
+    },
+    "BPCL": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -79.92
+    },
+    "ITC": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -79.23
+    },
+    "ADANIPORTS": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": 52
+    },
+    "MARUTI": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -65.15
+    },
+    "TITAN": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": 4.5
+    },
+    "TATASTEEL": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": 61.62
+    },
+    "ASIANPAINT": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": 63
+    },
+    "DRREDDY": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": 30
+    },
+    "NESTLEIND": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 1,
+      "totalPnl": -33.66
+    },
+    "EICHERMOT": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -72.48
+    },
+    "ADANIENT": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -74.5
+    },
+    "SBIN": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -75.75
+    },
+    "LT": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -77.4
+    },
+    "SHRIRAMFIN": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -79.74
+    },
+    "HINDUNILVR": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -75.18
+    },
+    "INFY": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": -18.2
     }
   }
 }

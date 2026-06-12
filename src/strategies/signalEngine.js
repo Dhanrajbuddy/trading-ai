@@ -7,39 +7,34 @@
  *   - ORB window:   first 2 × 15-min candles (9:15–9:45 AM IST)
  *   - Signal:       price closes above/below ORB high/low + 0.10% buffer, with volume spike
  *   - RSI filter:   45–72 for BUY, 28–55 for SELL (not at extremes = room to run)
+ *   - Trend filter: SELL signals blocked when ≥55% of universe stocks are above VWAP
  *   - SL:           0.5% fixed below/above entry
  *   - Target:       2 × ORB range (dynamic); min 1.0% fallback
  *   - Focus stocks: BAJFINANCE, BAJAJFINSV, TCS (best performers, 42-50% WR)
  *   - Max 2 trades/day/symbol, 30-min cooldown
  *
  * Backtest result (60d real data): +₹231 net | 46.7% WR | 30 trades
+ *
+ * Paper trading observation (Jun 2026, 31 trades): SELL signals had 0% WR in a rising market.
+ * Nifty trend filter added to suppress SELL signals when broad market is bullish.
  */
 
 const { log } = require('../services/logger');
 const { sendMarketClosedAlert } = require('../alerts/telegramAlert');
 const { calculatePositionSize, getCapital } = require('./riskManager');
+const {
+  MIN_CONFIDENCE, VOLUME_SPIKE_MIN, SL_PCT, TARGET_MULT, TARGET_PCT_FALLBACK,
+  ORB_CANDLES, ORB_BUFFER_PCT, ORB_MIN_RANGE_PCT, RSI_PERIOD, MAX_TRADES_PER_DAY, COOLDOWN_MINS,
+  WINDOW_START_MINS, ENTRY_CUTOFF_MINS, CLOSE_ALL_MINS, BULL_MARKET_THRESHOLD,
+  calcTradingCosts, computeRSI, scoreSignal, fixedSL, dynamicTarget,
+} = require('./orbCore');
 
-// ─── ORB Config (mirrors backtestEngine.js constants) ────────────────────────
-
-const MIN_CONFIDENCE      = 60;
-const VOLUME_SPIKE_MIN    = 1.5;
-const SL_PCT              = 0.5;
-const TARGET_MULT         = 2.0;    // 2× ORB range as target
-const TARGET_PCT_FALLBACK = 1.0;    // fallback if ORB range is tiny
-const ORB_CANDLES         = 2;      // first 2 × 15-min candles (30 min) form the ORB
-const ORB_BUFFER_PCT      = 0.25;   // 0.25% above/below ORB to filter false breakouts (was 0.10%)
-const CANDLE_MINS_15      = 15;     // 15-minute candles
-const RSI_PERIOD          = 14;
+// ─── Live-only constants (not shared with backtest) ───────────────────────────
+const CANDLE_MINS_15            = 15;
 const MAX_CAPITAL_PER_TRADE_PCT = 0.80;
 const MAX_CAPITAL_DAILY_MULT    = 2.5;
 const MAX_DAILY_RISK_PCT        = 0.020;
-const MAX_TRADES_PER_DAY        = 2;
-const COOLDOWN_MS               = 30 * 60 * 1000;  // 30-min cooldown
-
-// Trading window (IST)
-const WINDOW_START_MINS  = 9 * 60 + 30;   // 9:30 AM — after ORB established
-const ENTRY_CUTOFF_MINS  = 14 * 60 + 30;  // 2:30 PM — no new entries after this
-const CLOSE_ALL_MINS     = 15 * 60 + 15;  // 3:15 PM Zerodha auto-squareoff
+const COOLDOWN_MS               = COOLDOWN_MINS * 60 * 1000;
 
 // ─── Per-symbol in-memory state ───────────────────────────────────────────────
 
@@ -236,25 +231,7 @@ function commitCapital(positionValue) {
   console.log(`[SignalEngine] 💰 Capital committed: ₹${positionValue.toFixed(0)} | Day total: ₹${_capitalState.committed.toFixed(0)} / ₹${budget.toFixed(0)}`);
 }
 
-// ─── RSI ─────────────────────────────────────────────────────────────────────
-
-function computeRSI(prices) {
-  if (!prices || prices.length < RSI_PERIOD + 1) return null;
-  let gains = 0, losses = 0;
-  const slice = prices.slice(-(RSI_PERIOD + 1));
-  for (let i = 1; i < slice.length; i++) {
-    const diff = slice[i] - slice[i - 1];
-    if (diff > 0) gains  += diff;
-    else          losses -= diff;
-  }
-  const avgGain = gains  / RSI_PERIOD;
-  const avgLoss = losses / RSI_PERIOD;
-  if (avgGain === 0 && avgLoss === 0) return 50;
-  if (avgLoss === 0) return 100;
-  if (avgGain === 0) return 0;
-  const rs = avgGain / avgLoss;
-  return parseFloat((100 - 100 / (1 + rs)).toFixed(1));
-}
+// computeRSI imported from orbCore.js
 
 function strengthLabel(confidence) {
   if (confidence >= 80) return 'STRONG';
@@ -262,65 +239,36 @@ function strengthLabel(confidence) {
   return 'WEAK';
 }
 
-// ─── Trading cost model (Zerodha NSE equity intraday) ────────────────────────
-function calcTradingCosts(action, entryPrice, exitPrice, qty) {
-  const entryVal    = entryPrice * qty;
-  const exitVal     = exitPrice  * qty;
-  const slippage    = (entryVal + exitVal) * 0.0010;
-  const brokEntry   = Math.min(entryVal * 0.0003, 20);
-  const brokExit    = Math.min(exitVal  * 0.0003, 20);
-  const sellVal     = action === 'BUY' ? exitVal : entryVal;
-  const stt         = sellVal * 0.00025;
-  const exchCharges = (entryVal + exitVal) * 0.0000325;
-  const gst         = (brokEntry + brokExit + exchCharges) * 0.18;
-  return parseFloat((slippage + brokEntry + brokExit + stt + exchCharges + gst).toFixed(2));
-}
+// calcTradingCosts imported from orbCore.js
 
-// ─── Signal scoring ──────────────────────────────────────────────────────────
-//   Base: 40 (all ORB gates passed)
-//   +20 RSI quality (55–72 BUY | 28–45 SELL = room to run)
-//   +20 Volume (≥2× = strong; ≥3× = very strong)
-//   +20 VWAP alignment
-function scoreSignal(action, stock, rsi) {
-  let score = 40;
+// ─── Signal scoring (wrapper adding reasons array for live display) ──────────
+// Core scoring logic lives in orbCore.scoreSignal().
+function scoreSignalWithReasons(action, stock, rsi) {
+  const score = scoreSignal(action, {
+    rsi,
+    volumeMultiplier: stock.volumeMultiplier,
+    price: stock.price,
+    vwap:  stock.vwap,
+  });
   const reasons = [`ORB ${action === 'BUY' ? 'breakout above' : 'breakdown below'} range + buffer`];
-
-  // RSI quality
   if (rsi !== null) {
-    if (action === 'BUY' && rsi >= 60 && rsi <= 72) {
-      score += 20;
-      reasons.push(`RSI ${rsi} — bullish momentum, not overbought`);
-    } else if (action === 'BUY' && rsi >= 50) {
-      score += 10;
-      reasons.push(`RSI ${rsi} — moderate bullish bias`);
-    } else if (action === 'SELL' && rsi >= 28 && rsi <= 40) {
-      score += 20;
-      reasons.push(`RSI ${rsi} — bearish momentum, not oversold`);
-    } else if (action === 'SELL' && rsi <= 50) {
-      score += 10;
-      reasons.push(`RSI ${rsi} — moderate bearish bias`);
-    }
+    if ((action === 'BUY'  && rsi >= 60 && rsi <= 72) || (action === 'SELL' && rsi >= 28 && rsi <= 40))
+      reasons.push(`RSI ${rsi} — strong momentum`);
+    else if ((action === 'BUY' && rsi >= 50) || (action === 'SELL' && rsi <= 50))
+      reasons.push(`RSI ${rsi} — moderate momentum`);
   }
-
-  // Volume quality
   const vm = stock.volumeMultiplier;
   if (vm != null) {
-    if (vm >= 3.0)      { score += 20; reasons.push(`Volume ${vm.toFixed(1)}x — strong institutional`); }
-    else if (vm >= 2.0) { score += 15; reasons.push(`Volume ${vm.toFixed(1)}x — good confirmation`); }
-    else if (vm >= 1.5) { score += 8;  reasons.push(`Volume ${vm.toFixed(1)}x — spike confirmed`); }
+    if      (vm >= 3.0) reasons.push(`Volume ${vm.toFixed(1)}x — institutional`);
+    else if (vm >= 2.0) reasons.push(`Volume ${vm.toFixed(1)}x — strong`);
+    else if (vm >= 1.5) reasons.push(`Volume ${vm.toFixed(1)}x — spike confirmed`);
   }
-
-  // VWAP alignment
   if (stock.vwap != null) {
     const aligned = (action === 'BUY' && stock.price > stock.vwap) ||
                     (action === 'SELL' && stock.price < stock.vwap);
-    if (aligned) {
-      score += 20;
-      reasons.push(`Price ${action === 'BUY' ? 'above' : 'below'} VWAP ₹${stock.vwap.toFixed(2)}`);
-    }
+    if (aligned) reasons.push(`Price ${action === 'BUY' ? 'above' : 'below'} VWAP ₹${stock.vwap.toFixed(2)}`);
   }
-
-  return { score: Math.min(score, 100), reasons };
+  return { score, reasons };
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -349,6 +297,17 @@ function generateSignals(stocks, scanData) {
 
   const spikeSymbols = new Set((volumeSpikes || []).map((s) => s.symbol));
   const signals      = [];
+
+  // ── Nifty trend filter (computed once, applies to all symbols this cycle) ──
+  // Count how many stocks have price above VWAP. If ≥55% do, the market is
+  // broadly bullish and SELL breakdown signals are suppressed.
+  const _bullishCount  = stocks.filter((s) => s.vwap != null && s.price > s.vwap).length;
+  const _vwapCount     = stocks.filter((s) => s.vwap != null).length;
+  const bullMarketFraction = _vwapCount > 0 ? _bullishCount / _vwapCount : 0;
+  const isBullMarket   = bullMarketFraction >= BULL_MARKET_THRESHOLD;
+  if (isBullMarket) {
+    console.log(`[SignalEngine] 📈 Bull market detected — ${(_bullishCount)} / ${_vwapCount} stocks above VWAP (${(bullMarketFraction * 100).toFixed(0)}%). SELL signals suppressed.`);
+  }
 
   for (const stock of stocks) {
     const sym   = stock.symbol;
@@ -392,8 +351,19 @@ function generateSignals(stocks, scanData) {
     // No new entries after cutoff
     if (nowMins >= CLOSE_ALL_MINS) continue;
 
-    // ── ORB breakout entry conditions ────────────────────────────────────────
+    // ── Minimum ORB width gate ───────────────────────────────────────────────
+    // Tight ORBs produce SL levels within normal intraday noise — false stops.
+    // Evidence: 12/16 paper trade losses had ORB range < 0.5% of price.
     const orbRange    = orb.high - orb.low;
+    const orbRangePct = (orbRange / price) * 100;
+    if (orbRangePct < ORB_MIN_RANGE_PCT) {
+      if (process.env.SIGNAL_DEBUG === '1') {
+        console.log(`[SignalEngine] ✗ ${sym} ORB too narrow ${orbRangePct.toFixed(2)}% < ${ORB_MIN_RANGE_PCT}% — skip`);
+      }
+      continue;
+    }
+
+    // ── ORB breakout entry conditions ────────────────────────────────────────
     const orbBufHigh  = orb.high * (1 + ORB_BUFFER_PCT / 100);
     const orbBufLow   = orb.low  * (1 - ORB_BUFFER_PCT / 100);
 
@@ -405,8 +375,11 @@ function generateSignals(stocks, scanData) {
                            (stock.volumeMultiplier != null && stock.volumeMultiplier >= VOLUME_SPIKE_MIN);
 
     const rsi = get15MinRSI(sym);
-    const rsiOkBuy  = rsi === null || (rsi >= 45 && rsi <= 72);
-    const rsiOkSell = rsi === null || (rsi >= 28 && rsi <= 55);
+    // RSI gate: require RSI to be computed (null = fewer than 15 candles — not enough history).
+    // Previously null bypassed the gate, meaning RSI never filtered early-session signals.
+    // Now: skip signal if RSI not yet available; this matches the backtest behaviour.
+    const rsiOkBuy  = rsi !== null && rsi >= 45 && rsi <= 72;
+    const rsiOkSell = rsi !== null && rsi >= 28 && rsi <= 55;
 
     // VWAP alignment: hard gate (not just a scoring factor).
     // For BUY: price must be ABOVE VWAP (stock trading above its intraday average)
@@ -416,12 +389,12 @@ function generateSignals(stocks, scanData) {
     const vwapBelow = stock.vwap == null || price < stock.vwap;
 
     const isBuy  = price > orbBufHigh && bullishCandle && hasVolumeSpike && rsiOkBuy  && vwapAbove;
-    const isSell = price < orbBufLow  && bearishCandle && hasVolumeSpike && rsiOkSell && vwapBelow;
+    const isSell = price < orbBufLow  && bearishCandle && hasVolumeSpike && rsiOkSell && vwapBelow && !isBullMarket;
 
     if (!isBuy && !isSell) {
       // Log why no signal (verbose only for debugging)
       if (process.env.SIGNAL_DEBUG === '1') {
-        console.log(`[SignalEngine] ${sym} no signal — price=₹${price.toFixed(2)} orbH=₹${orbBufHigh.toFixed(2)} orbL=₹${orbBufLow.toFixed(2)} bullish=${bullishCandle} bear=${bearishCandle} volSpike=${hasVolumeSpike} RSI=${rsi}`);
+        console.log(`[SignalEngine] ${sym} no signal — price=₹${price.toFixed(2)} orbH=₹${orbBufHigh.toFixed(2)} orbL=₹${orbBufLow.toFixed(2)} bullish=${bullishCandle} bear=${bearishCandle} volSpike=${hasVolumeSpike} RSI=${rsi} rsiOkBuy=${rsiOkBuy} rsiOkSell=${rsiOkSell} bullMkt=${isBullMarket}(${(bullMarketFraction*100).toFixed(0)}%)`);
       }
       continue;
     }
@@ -429,23 +402,16 @@ function generateSignals(stocks, scanData) {
     const action = isBuy ? 'BUY' : 'SELL';
 
     // ── Score ────────────────────────────────────────────────────────────────
-    const { score, reasons } = scoreSignal(action, stock, rsi);
+    const { score, reasons } = scoreSignalWithReasons(action, stock, rsi);
     if (score < MIN_CONFIDENCE) {
       console.log(`[SignalEngine] ✗ ${sym} ${action} score=${score} < ${MIN_CONFIDENCE}`);
       continue;
     }
 
-    // ── SL and dynamic target (2× ORB range) ─────────────────────────────────
-    const entry = price;
-    const sl    = action === 'BUY'
-      ? parseFloat((entry * (1 - SL_PCT / 100)).toFixed(2))
-      : parseFloat((entry * (1 + SL_PCT / 100)).toFixed(2));
-
-    const orbRangePct   = (orbRange / entry) * 100;
-    const targetPct     = Math.max(orbRangePct * TARGET_MULT, TARGET_PCT_FALLBACK);
-    const target        = action === 'BUY'
-      ? parseFloat((entry * (1 + targetPct / 100)).toFixed(2))
-      : parseFloat((entry * (1 - targetPct / 100)).toFixed(2));
+    // ── SL and dynamic target via orbCore shared helpers ─────────────────────
+    const entry               = price;
+    const sl                  = fixedSL(action, entry);
+    const { target, targetPct } = dynamicTarget(action, entry, orb.high, orb.low);
 
     // ── Position sizing ───────────────────────────────────────────────────────
     const _riskCalc  = calculatePositionSize(entry, sl, target);
@@ -512,6 +478,8 @@ function generateSignals(stocks, scanData) {
       expectedProfit,
       expectedCost,
       reasons,
+      marketBreadth:    parseFloat((bullMarketFraction * 100).toFixed(1)),
+      marketTrend:      isBullMarket ? 'BULL' : 'NEUTRAL',
       source:           stock.source ?? 'live',
       timestamp:        stock.timestamp,
       confirmed:        true,
