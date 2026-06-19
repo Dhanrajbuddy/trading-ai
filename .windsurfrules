@@ -10,12 +10,24 @@ Examples:
 
 ```bash
 rtk git status
-rtk cargo test
-rtk ls src/
-rtk grep "pattern" src/
-rtk find "*.rs" .
+rtk git diff
+rtk git log --oneline -10
+
+rtk ls
+rtk ls src
+rtk ls frontend
+
+rtk grep "signalEngine" src/
+rtk grep "backtestEngine" src/
+rtk grep "ORB" src/
+
+rtk find . -name "*.js"
+rtk find . -name "*.json"
+
 rtk docker ps
-rtk gh pr list
+rtk docker compose ps
+rtk docker compose logs
+rtk docker exec trading-ai bash
 ```
 
 ## Meta Commands
@@ -29,4 +41,232 @@ rtk proxy <cmd>       # Run raw (no filtering, for debugging)
 
 ## Why
 
-RTK filters and compresses command output before it reaches the LLM context, saving 60-90% tokens on common operations. Always use `rtk <cmd>` instead of raw commands.
+RTK filters and compresses command output before it reaches the LLM context, saving 60-90% tokens on common operations.
+
+Always use:
+
+```bash
+rtk <command>
+```
+
+instead of raw shell commands whenever possible.
+
+---
+
+# Trading AI Project Rules
+
+## General
+
+Minimize token usage.
+
+Never perform broad repository exploration unless explicitly requested.
+
+Always:
+
+1. Search first.
+2. Identify the exact file.
+3. Read the minimum required context.
+4. Make the change directly.
+
+---
+
+## Repository Exploration
+
+Never inspect more than 3 files initially.
+
+Before opening additional files:
+
+1. Explain why they are needed.
+2. Confirm they are related to the task.
+
+Avoid repository-wide analysis.
+
+Avoid AI detective mode.
+
+---
+
+## File Reading
+
+Never read entire files unless explicitly requested.
+
+Always:
+
+* Read only the relevant function.
+* Read only the relevant module.
+* Read only the relevant component.
+* Read a maximum of 100 lines at a time.
+* Use search before opening files.
+
+Prefer:
+
+```bash
+rtk grep "function_name" src/
+rtk grep "component_name" frontend/
+```
+
+before opening files.
+
+---
+
+## React Frontend
+
+For React files:
+
+* Open only the requested component.
+* Avoid reading entire pages.
+* Avoid reading unrelated imports.
+* Avoid scanning complete feature folders.
+* Read only the component being modified.
+
+---
+
+## Node.js Backend
+
+For backend files:
+
+* Read only the affected route.
+* Read only the affected service.
+* Read only the affected controller.
+* Read only the affected utility.
+
+Avoid scanning the entire src directory.
+
+---
+
+## Trading Strategy Development
+
+When working on:
+
+* signalEngine.js
+* backtestEngine.js
+* orbCore.js
+* strategy files
+
+Read only the specific function being discussed.
+
+Do not re-analyze the entire strategy unless explicitly requested.
+
+Do not re-run full historical reasoning already established in previous messages.
+
+Focus only on the requested modification.
+
+---
+
+## Large JSON Files
+
+Never read entire JSON files.
+
+Especially:
+
+```text
+signal-outcomes.json
+backtest-results.json
+trade-history.json
+```
+
+Always:
+
+* Read only required keys.
+* Read only small samples.
+* Summarize data before analysis.
+
+Avoid loading entire files into context.
+
+---
+
+## Docker
+
+Always use RTK.
+
+Preferred commands:
+
+```bash
+rtk docker compose ps
+rtk docker compose logs --tail=50
+rtk docker exec trading-ai bash
+```
+
+When viewing logs:
+
+* Tail only required lines.
+* Never dump full logs.
+
+---
+
+## Git
+
+Always use RTK.
+
+Preferred:
+
+```bash
+rtk git status
+rtk git diff
+rtk git log --oneline -10
+```
+
+Avoid:
+
+* Large commit histories.
+* Repository-wide diffs.
+* Full blame output.
+
+---
+
+## Large Directories
+
+Never scan these directories unless explicitly requested:
+
+```text
+node_modules/
+dist/
+build/
+coverage/
+logs/
+.cache/
+```
+
+---
+
+## Code Changes
+
+Before editing:
+
+1. Identify the exact file.
+2. Identify the exact function.
+3. Read minimal surrounding context.
+4. Patch directly.
+
+Avoid exploratory scanning.
+
+---
+
+## Preferred Workflow
+
+1. Search.
+2. Identify exact file.
+3. Read minimum context.
+4. Edit.
+5. Verify.
+6. Stop.
+
+Do not continue exploring unrelated files after the task is complete.
+
+---
+
+## Backtesting Rules
+
+Avoid automatically:
+
+* Running full 60-day backtests.
+* Running all-symbol backtests.
+* Reading all historical trades.
+* Re-analyzing complete datasets.
+
+Prefer:
+
+* Single-symbol tests.
+* Small samples.
+* Incremental validation.
+
+Only run large backtests when explicitly requested.
