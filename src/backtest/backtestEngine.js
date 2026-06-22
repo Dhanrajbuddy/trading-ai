@@ -133,6 +133,7 @@ function replayCandles(candles, symbol) {
   let currentDay = '', dailyCandleCount = 0, dailyTradeCount = 0, dailyTradeDay = '';
   let lastSignalIdx = -999;
   let openTrade = null;
+  let pendingBreakout = null;  // confirmation candle: { action, breakoutIdx } — awaits next-candle confirm
 
   for (let i = 0; i < candles.length; i++) {
     const [ts, open, high, low, close, rawVol] = candles[i];
@@ -146,6 +147,7 @@ function replayCandles(candles, symbol) {
       orbHigh = -Infinity; orbLow = Infinity; orbEstablished = false;
       dailyCandleCount = 0;
       currentDay = candleDate;
+      pendingBreakout = null;  // never carry a pending breakout across days
       if (dailyTradeDay !== candleDate) { dailyTradeCount = 0; dailyTradeDay = candleDate; }
 
       // Safety net: force-close overnight carry
@@ -234,20 +236,49 @@ function replayCandles(candles, symbol) {
       if (openTrade) continue;
     }
 
-    // ── Window / limits guards ────────────────────────────────────────────────
-    const inWindow  = candleMins >= WINDOW_START_MINS && candleMins <= ENTRY_CUTOFF_MINS;
+    // ── Common levels for this candle ────────────────────────────────────────
+    const inWindow   = candleMins >= WINDOW_START_MINS && candleMins <= ENTRY_CUTOFF_MINS;
+    const orbRange   = orbHigh - orbLow;
+    const orbBufHigh = orbHigh * (1 + ORB_BUFFER_PCT / 100);
+    const orbBufLow  = orbLow  * (1 - ORB_BUFFER_PCT / 100);
+
+    // ── Confirmation candle resolution ───────────────────────────────────────
+    // A breakout from the PREVIOUS candle only becomes a trade if THIS candle's
+    // close also holds beyond the ORB breakout level in the same direction.
+    if (pendingBreakout) {
+      const pb = pendingBreakout;
+      pendingBreakout = null;  // single-candle confirmation window only
+      const confirmed = pb.action === 'BUY' ? close > orbBufHigh : close < orbBufLow;
+      if (confirmed && inWindow && dailyTradeCount < MAX_TRADES_PER_DAY) {
+        const action     = pb.action;
+        const sl         = fixedSL(action, close);
+        const { target } = dynamicTarget(action, close, orbHigh, orbLow);
+        const qty        = Math.floor(CAPITAL_PER_TRADE / close);
+        if (qty > 0) {
+          const estCost = calcTradingCosts(action, close, target, qty);
+          if (Math.abs(target - close) * qty > estCost) {
+            lastSignalIdx = i;
+            dailyTradeCount++;
+            openTrade = { action, entry: close, sl, target, qty, entryIdx: i, entryTs: ts };
+            console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} ${action} CONFIRMED entry=₹${close.toFixed(2)} sl=₹${sl} tgt=₹${target} qty=${qty}`);
+            continue;
+          }
+        }
+      } else if (!confirmed) {
+        console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} ${pb.action} breakout NOT confirmed (close=₹${close.toFixed(2)}) — filtered`);
+      }
+      // not confirmed (or not enterable) → fall through; this candle may itself be a fresh breakout
+    }
+
+    // ── Window / limits guards (for detecting a NEW breakout) ─────────────────
     if (!inWindow)                                continue;
     if (dailyTradeCount >= MAX_TRADES_PER_DAY)   continue;
     if (i - lastSignalIdx < COOLDOWN_CANDLES)    continue;
     if ((high - low) / close < 0.002)            continue;  // skip doji/sideways
 
     // ── Entry conditions (exact match to signalEngine.js) ────────────────────
-    const orbRange    = orbHigh - orbLow;
     const orbRangePct = (orbRange / close) * 100;
     if (orbRangePct < ORB_MIN_RANGE_PCT) continue;  // narrow ORB — skip (mirrors signalEngine)
-
-    const orbBufHigh = orbHigh * (1 + ORB_BUFFER_PCT / 100);
-    const orbBufLow  = orbLow  * (1 - ORB_BUFFER_PCT / 100);
 
     const rsi = computeRSI(closeHistory);
 
@@ -281,18 +312,9 @@ function replayCandles(candles, symbol) {
       continue;
     }
 
-    const sl             = fixedSL(action, close);
-    const { target }     = dynamicTarget(action, close, orbHigh, orbLow);
-    const qty            = Math.floor(CAPITAL_PER_TRADE / close);
-    if (qty <= 0) continue;
-
-    const estCost = calcTradingCosts(action, close, target, qty);
-    if (Math.abs(target - close) * qty <= estCost) continue;  // position too small to cover costs
-
-    lastSignalIdx = i;
-    dailyTradeCount++;
-    openTrade = { action, entry: close, sl, target, qty, entryIdx: i, entryTs: ts };
-    console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} ${action} entry=₹${close.toFixed(2)} sl=₹${sl} tgt=₹${target} qty=${qty} score=${score} rsi=${rsi?.toFixed(1)} vm=${vm}`);
+    // ── Breakout detected — do NOT enter yet. Await next-candle confirmation. ──
+    pendingBreakout = { action, breakoutIdx: i };
+    console.log(`[BT:${symbol}] ${ts.slice(0,16).replace('T',' ')} ${action} breakout @₹${close.toFixed(2)} score=${score} rsi=${rsi?.toFixed(1)} vm=${vm} — awaiting confirmation`);
   }
 
   // End-of-data force-close
@@ -515,4 +537,4 @@ async function runPortfolioBacktest(symbols = DEFAULT_SYMBOLS, days = 30) {
   return result;
 }
 
-module.exports = { runBacktest, runPortfolioBacktest };
+module.exports = { runBacktest, runPortfolioBacktest, INSTRUMENT_TOKENS };

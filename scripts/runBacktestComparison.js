@@ -14,7 +14,10 @@
  *   node /app/scripts/runBacktestComparison.js [days=45] [symbols=RELIANCE,TCS,...]
  */
 
-require('dotenv').config({ path: '/app/.env' });
+// override:true is required — the container's start-time ZERODHA_ACCESS_TOKEN
+// (baked into the process env at `docker compose up`) goes stale daily. The live
+// app refreshes the token in .env via browser re-login; we must prefer that value.
+require('dotenv').config({ path: '/app/.env', override: true });
 
 const axios = require('axios');
 const fs    = require('fs');
@@ -116,7 +119,106 @@ function scoreSignal(action, rsi, vm, price, vwap, orbRange) {
   return Math.min(score, 100);
 }
 
-// ─── Core replay — parametric so A/B can differ ───────────────────────────────
+// ─── Forward simulation for filtered-trade analysis ──────────────────────────
+// Given a breakout candle that FAILED confirmation, simulate what would have
+// happened had it entered immediately at the breakout candle close (B-style).
+// Returns the eventual outcome so we can measure whether confirmation removed
+// false breakouts (losers) or also discarded real moves (winners).
+function simulateForward(candles, startIdx, action, entry, sl, target, qty, CLOSE_ALL_MINS) {
+  const startDay = candles[startIdx][0].slice(0, 10);
+  for (let j = startIdx + 1; j < candles.length; j++) {
+    const [ts, open, high, low, close] = candles[j];
+    if (ts.slice(0, 10) !== startDay) {
+      // overnight — exit at next day's open
+      const gp = action === 'BUY' ? (open - entry) * qty : (entry - open) * qty;
+      const cost = calcCosts(action, entry, open, qty);
+      return { result: (gp - cost) >= 0 ? 'WIN' : 'LOSS', profit: +(gp - cost).toFixed(2), exitReason: 'overnight' };
+    }
+    const mins = getCandleMinsIST(ts);
+    if (mins >= CLOSE_ALL_MINS) {
+      const gp = action === 'BUY' ? (close - entry) * qty : (entry - close) * qty;
+      const cost = calcCosts(action, entry, close, qty);
+      return { result: (gp - cost) >= 0 ? 'WIN' : 'LOSS', profit: +(gp - cost).toFixed(2), exitReason: 'squareoff' };
+    }
+    const slHit  = (action === 'BUY' && low  <= sl)    || (action === 'SELL' && high >= sl);
+    const tgtHit = (action === 'BUY' && high >= target) || (action === 'SELL' && low  <= target);
+    if (slHit || tgtHit) {
+      const exitP = slHit ? sl : target;
+      const gp = action === 'BUY' ? (exitP - entry) * qty : (entry - exitP) * qty;
+      const cost = calcCosts(action, entry, exitP, qty);
+      return { result: slHit ? 'LOSS' : 'WIN', profit: +(gp - cost).toFixed(2), exitReason: slHit ? 'SL' : 'target' };
+    }
+  }
+  // ran out of data
+  const [, , , , lclose] = candles[candles.length - 1];
+  const gp = action === 'BUY' ? (lclose - entry) * qty : (entry - lclose) * qty;
+  const cost = calcCosts(action, entry, lclose, qty);
+  return { result: (gp - cost) >= 0 ? 'WIN' : 'LOSS', profit: +(gp - cost).toFixed(2), exitReason: 'end-of-data' };
+}
+
+// ─── Trade planning helpers ───────────────────────────────────────────────────
+
+// Momentum entry plan. SL_MODE 'fixed' = 0.5% from entry; 'structure' = opposite
+// ORB boundary (natural invalidation). RISK_PER_TRADE (₹) sizes by risk to hold
+// loss-per-trade roughly constant; otherwise size by fixed capital.
+function momentumPlan(action, close, orbHigh, orbLow, cfg) {
+  const orbRange = orbHigh - orbLow;
+  let sl;
+  if (cfg.SL_MODE === 'structure') {
+    sl = action === 'BUY' ? +orbLow.toFixed(2) : +orbHigh.toFixed(2);
+  } else {
+    sl = action === 'BUY'
+      ? +(close * (1 - cfg.SL_PCT / 100)).toFixed(2)
+      : +(close * (1 + cfg.SL_PCT / 100)).toFixed(2);
+  }
+  const orbPct = orbRange / close * 100;
+  const tgtPct = Math.max(orbPct * cfg.TARGET_MULT, cfg.TARGET_PCT_FALLBACK);
+  const target = action === 'BUY'
+    ? +(close * (1 + tgtPct / 100)).toFixed(2)
+    : +(close * (1 - tgtPct / 100)).toFixed(2);
+  const slDist = Math.abs(close - sl);
+  let qty;
+  if (cfg.RISK_PER_TRADE && slDist > 0) {
+    qty = Math.min(Math.floor(cfg.RISK_PER_TRADE / slDist), Math.floor(cfg.CAPITAL_PER_TRADE / close));
+  } else {
+    qty = Math.floor(cfg.CAPITAL_PER_TRADE / close);
+  }
+  return { sl, target, qty };
+}
+
+// Fade entry plan (mean reversion). action is the FADE direction. Target = VWAP
+// when it sits on the profitable side, else the far ORB boundary. SL sits just
+// beyond the failed-breakout extreme. Risk-sized.
+function fadePlan(action, close, orbHigh, orbLow, vwap, breakoutHigh, breakoutLow, cfg) {
+  const mode = cfg.FADE_TARGET_MODE || 'vwap';
+  const rMult = cfg.FADE_R_MULT || 1.5;
+  let sl, target;
+  if (action === 'SELL') {           // fading a failed upper breakout
+    sl = +(breakoutHigh * 1.001).toFixed(2);
+  } else {                            // fading a failed lower breakout
+    sl = +(breakoutLow * 0.999).toFixed(2);
+  }
+  const slDist = Math.abs(close - sl);
+  if (mode === 'orb_opposite') {
+    target = action === 'SELL' ? +orbLow.toFixed(2) : +orbHigh.toFixed(2);
+  } else if (mode === 'rmult') {
+    target = action === 'SELL'
+      ? +(close - rMult * slDist).toFixed(2)
+      : +(close + rMult * slDist).toFixed(2);
+  } else { // vwap
+    if (action === 'SELL') target = (vwap != null && vwap < close) ? +vwap.toFixed(2) : +orbLow.toFixed(2);
+    else                   target = (vwap != null && vwap > close) ? +vwap.toFixed(2) : +orbHigh.toFixed(2);
+  }
+  let qty;
+  if (cfg.RISK_PER_TRADE && slDist > 0) {
+    qty = Math.min(Math.floor(cfg.RISK_PER_TRADE / slDist), Math.floor(cfg.CAPITAL_PER_TRADE / close));
+  } else {
+    qty = Math.floor(cfg.CAPITAL_PER_TRADE / close);
+  }
+  return { sl, target, qty };
+}
+
+// ─── Core replay — parametric so A/B/C can differ ─────────────────────────────
 
 function replayCandles(candles, symbol, cfg) {
   const {
@@ -125,13 +227,14 @@ function replayCandles(candles, symbol, cfg) {
     WINDOW_START_MINS, ENTRY_CUTOFF_MINS, CLOSE_ALL_MINS,
     BULL_MARKET_THRESHOLD, CAPITAL_PER_TRADE,
     SL_PCT, TARGET_MULT, TARGET_PCT_FALLBACK,
+    CONFIRMATION,
   } = cfg;
 
-  const trades = [], closeHist = [], volHist = [], vwapHist = [];
+  const trades = [], filtered = [], closeHist = [], volHist = [], vwapHist = [];
   let vwapAccum = 0, vwapVol = 0;
   let orbHigh = -Infinity, orbLow = Infinity, orbEst = false;
   let curDay = '', dayCnt = 0, dayTrades = 0, dayTradeDay = '';
-  let lastSigIdx = -999, openTrade = null;
+  let lastSigIdx = -999, openTrade = null, pending = null;
 
   for (let i = 0; i < candles.length; i++) {
     const [ts, open, high, low, close, rawVol] = candles[i];
@@ -142,7 +245,7 @@ function replayCandles(candles, symbol, cfg) {
     if (date !== curDay) {
       vwapAccum = 0; vwapVol = 0;
       orbHigh = -Infinity; orbLow = Infinity; orbEst = false;
-      dayCnt = 0; curDay = date;
+      dayCnt = 0; curDay = date; pending = null;
       if (dayTradeDay !== date) { dayTrades = 0; dayTradeDay = date; }
       if (openTrade) {
         const { action: a, entry, sl, target, qty, entryTs, entryIdx } = openTrade;
@@ -199,17 +302,37 @@ function replayCandles(candles, symbol, cfg) {
       if (openTrade) continue;
     }
 
-    if (mins < WINDOW_START_MINS || mins > ENTRY_CUTOFF_MINS) continue;
+    const inWindow = mins >= WINDOW_START_MINS && mins <= ENTRY_CUTOFF_MINS;
+    const orbRange = orbHigh - orbLow;
+    const orbBufH  = orbHigh * (1 + ORB_BUFFER_PCT / 100);
+    const orbBufL  = orbLow  * (1 - ORB_BUFFER_PCT / 100);
+
+    // ── Confirmation resolution (CONFIRMATION mode only) ──────────────────────
+    if (CONFIRMATION && pending) {
+      const pb = pending; pending = null;
+      const confirmed = pb.action === 'BUY' ? close > orbBufH : close < orbBufL;
+      if (confirmed && inWindow && dayTrades < MAX_TRADES_PER_DAY) {
+        const action = pb.action;
+        const { sl, target, qty } = momentumPlan(action, close, orbHigh, orbLow, cfg);
+        if (qty > 0) {
+          lastSigIdx = i; dayTrades++;
+          openTrade = { action, entry: close, sl, target, qty, entryIdx: i, entryTs: ts };
+          continue;
+        }
+      } else if (!confirmed) {
+        // Filtered: simulate what would have happened had it entered B-style
+        // (immediately at the breakout candle close) to classify the removed trade.
+        const o = simulateForward(candles, pb.breakoutIdx, pb.action, pb.entry, pb.sl, pb.target, pb.qty, CLOSE_ALL_MINS);
+        filtered.push({ symbol, action: pb.action, breakoutTs: pb.entryTs, ...o });
+      }
+    }
+
+    // ── Guards for detecting a NEW breakout ───────────────────────────────────
+    if (!inWindow) continue;
     if (dayTrades >= MAX_TRADES_PER_DAY) continue;
     if (i - lastSigIdx < COOLDOWN_CANDLES) continue;
     if ((high - low) / close < 0.002) continue;
-
-    const orbRange = orbHigh - orbLow;
-    // A/B difference: ORB minimum range filter
     if (ORB_MIN_RANGE_PCT > 0 && (orbRange / close * 100) < ORB_MIN_RANGE_PCT) continue;
-
-    const orbBufH = orbHigh * (1 + ORB_BUFFER_PCT / 100);
-    const orbBufL = orbLow  * (1 - ORB_BUFFER_PCT / 100);
 
     const rsi = computeRSI(closeHist);
     const avgVol = volHist.length > 1
@@ -241,21 +364,17 @@ function replayCandles(candles, symbol, cfg) {
     // A/B difference: MIN_CONFIDENCE threshold
     if (score < MIN_CONFIDENCE) continue;
 
-    const sl = action === 'BUY'
-      ? +(close * (1 - SL_PCT / 100)).toFixed(2)
-      : +(close * (1 + SL_PCT / 100)).toFixed(2);
-
-    const orbPct    = orbRange / close * 100;
-    const tgtPct    = Math.max(orbPct * TARGET_MULT, TARGET_PCT_FALLBACK);
-    const target    = action === 'BUY'
-      ? +(close * (1 + tgtPct / 100)).toFixed(2)
-      : +(close * (1 - tgtPct / 100)).toFixed(2);
-
-    const qty = Math.floor(CAPITAL_PER_TRADE / close);
+    const { sl, target, qty } = momentumPlan(action, close, orbHigh, orbLow, cfg);
     if (qty <= 0) continue;
 
-    lastSigIdx = i; dayTrades++;
-    openTrade = { action, entry: close, sl, target, qty, entryIdx: i, entryTs: ts };
+    if (CONFIRMATION) {
+      // Breakout detected — await next-candle confirmation. Store full B-style
+      // params so a failed confirmation can be simulated for the filtered report.
+      pending = { action, breakoutIdx: i, entry: close, sl, target, qty, entryTs: ts };
+    } else {
+      lastSigIdx = i; dayTrades++;
+      openTrade = { action, entry: close, sl, target, qty, entryIdx: i, entryTs: ts };
+    }
   }
 
   if (openTrade && candles.length > 0) {
@@ -268,7 +387,133 @@ function replayCandles(candles, symbol, cfg) {
       profit: +((gp - cost).toFixed(2)), result: (gp - cost) >= 0 ? 'WIN' : 'LOSS',
       entryTime: entryTs, exitTime: lts, note: 'end-of-data' });
   }
-  return trades;
+  return { trades, filtered };
+}
+
+// ─── Fade replay (mean reversion on FAILED breakouts) ─────────────────────────
+// Entry: price pokes beyond the ORB (with volume + candle direction), then the
+// NEXT candle closes back INSIDE the range → failed breakout → fade it.
+// This directly trades the setups the confirmation candle was discarding.
+function replayFade(candles, symbol, cfg) {
+  const {
+    VOLUME_SPIKE_MIN, ORB_BUFFER_PCT, ORB_MIN_RANGE_PCT, ORB_CANDLES,
+    MAX_TRADES_PER_DAY, COOLDOWN_CANDLES,
+    WINDOW_START_MINS, ENTRY_CUTOFF_MINS, CLOSE_ALL_MINS,
+  } = cfg;
+
+  const trades = [], closeHist = [], volHist = [];
+  let vwapAccum = 0, vwapVol = 0;
+  let orbHigh = -Infinity, orbLow = Infinity, orbEst = false;
+  let curDay = '', dayCnt = 0, dayTrades = 0, dayTradeDay = '';
+  let lastSigIdx = -999, openTrade = null, pending = null;
+
+  const closeTrade = (a, entry, exitP, qty, entryTs, ts, result, note) => {
+    const gp = a === 'BUY' ? (exitP - entry) * qty : (entry - exitP) * qty;
+    const cost = calcCosts(a, entry, exitP, qty);
+    trades.push({ symbol, action: a, entry: +entry.toFixed(2), exit: +exitP.toFixed(2),
+      sl: 0, target: 0, qty, profit: +((gp - cost).toFixed(2)),
+      result: result || ((gp - cost) >= 0 ? 'WIN' : 'LOSS'), entryTime: entryTs, exitTime: ts, note });
+  };
+
+  for (let i = 0; i < candles.length; i++) {
+    const [ts, open, high, low, close, rawVol] = candles[i];
+    const vol = (typeof rawVol === 'number' && isFinite(rawVol) && rawVol > 0) ? rawVol : null;
+    const mins = getCandleMinsIST(ts);
+    const date = ts.slice(0, 10);
+
+    if (date !== curDay) {
+      vwapAccum = 0; vwapVol = 0;
+      orbHigh = -Infinity; orbLow = Infinity; orbEst = false;
+      dayCnt = 0; curDay = date; pending = null;
+      if (dayTradeDay !== date) { dayTrades = 0; dayTradeDay = date; }
+      if (openTrade) {
+        const { action: a, entry, sl, target, qty, entryTs } = openTrade;
+        closeTrade(a, entry, open, qty, entryTs, ts, null, 'overnight');
+        openTrade = null;
+      }
+    }
+
+    const tp = (high + low + close) / 3;
+    if (vol !== null) { vwapAccum += tp * vol; vwapVol += vol; }
+    const vwap = vwapVol > 0 ? vwapAccum / vwapVol : null;
+
+    closeHist.push(close); if (closeHist.length > 30) closeHist.shift();
+    dayCnt++;
+    if (vol !== null) { volHist.push(vol); if (volHist.length > 20) volHist.shift(); }
+
+    if (!orbEst) {
+      orbHigh = Math.max(orbHigh, high);
+      orbLow  = Math.min(orbLow,  low);
+      if (dayCnt >= ORB_CANDLES) orbEst = true;
+      continue;
+    }
+
+    // Manage open fade trade
+    if (openTrade) {
+      const { action: a, entry, sl, target, qty, entryTs } = openTrade;
+      if (mins >= CLOSE_ALL_MINS) { closeTrade(a, entry, close, qty, entryTs, ts, null, 'squareoff'); openTrade = null; continue; }
+      const slHit  = (a === 'BUY' && low  <= sl)    || (a === 'SELL' && high >= sl);
+      const tgtHit = (a === 'BUY' && high >= target) || (a === 'SELL' && low  <= target);
+      if (slHit || tgtHit) {
+        closeTrade(a, entry, slHit ? sl : target, qty, entryTs, ts, slHit ? 'LOSS' : 'WIN', null);
+        openTrade = null;
+      }
+      if (openTrade) continue;
+    }
+
+    const inWindow = mins >= WINDOW_START_MINS && mins <= ENTRY_CUTOFF_MINS;
+    const orbBufH  = orbHigh * (1 + ORB_BUFFER_PCT / 100);
+    const orbBufL  = orbLow  * (1 - ORB_BUFFER_PCT / 100);
+
+    // Resolve pending failed-breakout → fade entry
+    if (pending) {
+      const pb = pending; pending = null;
+      // Failed = price closed back INSIDE the ORB on this candle
+      const failedUpper = pb.side === 'upper' && close < orbHigh;
+      const failedLower = pb.side === 'lower' && close > orbLow;
+      if ((failedUpper || failedLower) && inWindow && dayTrades < MAX_TRADES_PER_DAY) {
+        const action = pb.side === 'upper' ? 'SELL' : 'BUY';
+        const { sl, target, qty } = fadePlan(action, close, orbHigh, orbLow, vwap, pb.breakoutHigh, pb.breakoutLow, cfg);
+        const profitable = action === 'SELL' ? target < close : target > close;
+        if (qty > 0 && profitable && Math.abs(close - sl) > 0) {
+          lastSigIdx = i; dayTrades++;
+          openTrade = { action, entry: close, sl, target, qty, entryIdx: i, entryTs: ts };
+          continue;
+        }
+      }
+    }
+
+    // Detect a breakout ATTEMPT (to fade if it fails next candle)
+    if (!inWindow) continue;
+    if (dayTrades >= MAX_TRADES_PER_DAY) continue;
+    if (i - lastSigIdx < COOLDOWN_CANDLES) continue;
+    if ((high - low) / close < 0.002) continue;
+    const orbRange = orbHigh - orbLow;
+    if (ORB_MIN_RANGE_PCT > 0 && (orbRange / close * 100) < ORB_MIN_RANGE_PCT) continue;
+
+    const avgVol = volHist.length > 1
+      ? volHist.slice(0, -1).reduce((s, v) => s + v, 0) / (volHist.length - 1)
+      : (volHist[0] ?? 0);
+    const vm = (vol !== null && avgVol > 0) ? +(vol / avgVol).toFixed(2) : null;
+    const hasSpike = vm != null && vm >= VOLUME_SPIKE_MIN;
+    if (!hasSpike) continue;
+
+    const upperAttempt = close > orbBufH && close > open;
+    const lowerAttempt = close < orbBufL && close < open;
+    if (!upperAttempt && !lowerAttempt) continue;
+
+    pending = {
+      side: upperAttempt ? 'upper' : 'lower',
+      breakoutIdx: i, breakoutHigh: high, breakoutLow: low, entryTs: ts,
+    };
+  }
+
+  if (openTrade && candles.length > 0) {
+    const [lts, , , , lclose] = candles[candles.length - 1];
+    const { action: a, entry, qty, entryTs } = openTrade;
+    closeTrade(a, entry, lclose, qty, entryTs, lts, null, 'end-of-data');
+  }
+  return { trades, filtered: [] };
 }
 
 // ─── Metrics ──────────────────────────────────────────────────────────────────
@@ -278,6 +523,7 @@ function metrics(trades, days) {
     trades: 0, wins: 0, losses: 0, winRate: 0, netPnL: 0, totalCosts: 0,
     profitFactor: 0, avgRR: 0, maxDrawdown: 0, tradesPerDay: 0,
     buyWR: 0, sellWR: 0, buys: 0, sells: 0,
+    avgWin: 0, avgLoss: 0, slHits: 0, targetHits: 0,
   };
 
   const wins   = trades.filter(t => t.result === 'WIN');
@@ -324,6 +570,10 @@ function metrics(trades, days) {
     sells:        sells.length,
     buyWR:        buys.length > 0 ? +(buyWins.length / buys.length * 100).toFixed(1) : 0,
     sellWR:       sells.length > 0 ? +(sells.filter(t => t.result === 'WIN').length / sells.length * 100).toFixed(1) : 0,
+    avgWin:       wins.length   > 0 ? +(wins.reduce((s, t) => s + t.profit, 0)   / wins.length).toFixed(2)   : 0,
+    avgLoss:      losses.length > 0 ? +(losses.reduce((s, t) => s + t.profit, 0) / losses.length).toFixed(2) : 0,
+    slHits:       trades.filter(t => t.result === 'LOSS').length,
+    targetHits:   trades.filter(t => t.result === 'WIN').length,
   };
 }
 
@@ -351,30 +601,39 @@ const SYMBOLS = process.argv[3]
       'HCLTECH',  'BAJFINANCE','ONGC',   'BHARTIARTL', 'TECHM',
     ];
 
-const CFG_A = {   // Original strategy
-  MIN_CONFIDENCE:   60,
+const BASE = {
+  MIN_CONFIDENCE:   68,
   VOLUME_SPIKE_MIN: 1.5,
   ORB_BUFFER_PCT:   0.10,
-  ORB_MIN_RANGE_PCT: 0,     // no filter
+  ORB_MIN_RANGE_PCT: 0.30,
   ORB_CANDLES:      2,
   MAX_TRADES_PER_DAY: 2,
   COOLDOWN_CANDLES: 2,
   WINDOW_START_MINS: 9*60+30,
   ENTRY_CUTOFF_MINS: 14*60+30,
   CLOSE_ALL_MINS:   15*60+15,
-  BULL_MARKET_THRESHOLD: 0, // no trend filter
+  BULL_MARKET_THRESHOLD: 0.55,
   CAPITAL_PER_TRADE: 16_000,
   SL_PCT:           0.5,
   TARGET_MULT:      2.0,
   TARGET_PCT_FALLBACK: 1.0,
+  CONFIRMATION:     true,        // confirmation candle (validated) kept in all
+  SL_MODE:          'fixed',     // 'fixed' | 'structure'
+  RISK_PER_TRADE:   null,        // null = capital sizing; number = risk-based ₹
 };
 
-const CFG_B = {   // Current strategy (all improvements)
-  ...CFG_A,
-  MIN_CONFIDENCE:       68,
-  ORB_MIN_RANGE_PCT:    0.30,
-  BULL_MARKET_THRESHOLD: 0.55,
-};
+// 1) CURRENT — validated confirmation strategy (the established baseline)
+const CFG_CURRENT = { ...BASE };
+
+// 2) STRUCT — replace fixed 0.5% SL with opposite-ORB-boundary SL + risk sizing
+//    RISK_PER_TRADE ≈ baseline risk (16k × 0.5% = ₹80) so ₹ risk/trade stays comparable
+const CFG_STRUCT = { ...BASE, SL_MODE: 'structure', RISK_PER_TRADE: 80 };
+
+// 3) FADE combo — mean reversion on failed breakouts + structure stop (beyond
+//    breakout extreme) + ₹80 risk sizing + a PROPER target (fixing the VWAP flaw).
+const CFG_FADE_ORB = { ...BASE, RISK_PER_TRADE: 80, FADE_TARGET_MODE: 'orb_opposite' };
+const CFG_FADE_15R = { ...BASE, RISK_PER_TRADE: 80, FADE_TARGET_MODE: 'rmult', FADE_R_MULT: 1.5 };
+const CFG_FADE_2R  = { ...BASE, RISK_PER_TRADE: 80, FADE_TARGET_MODE: 'rmult', FADE_R_MULT: 2.0 };
 
 const toDate   = new Date();
 const fromDate = new Date(toDate);
@@ -385,11 +644,15 @@ const toStr    = toDate.toISOString().slice(0, 10);
 const RESULTS_PATH = path.resolve('/app/data/backtest-results.json');
 
 async function main() {
-  console.log(`\n${'═'.repeat(70)}`);
-  console.log(`  BACKTEST COMPARISON  |  ${fromStr} → ${toStr}  |  ${SYMBOLS.length} symbols`);
-  console.log(`${'═'.repeat(70)}\n`);
+  console.log(`\n${'═'.repeat(78)}`);
+  console.log(`  FADE COMBO TEST  |  ${fromStr} → ${toStr}  |  ${SYMBOLS.length} symbols`);
+  console.log(`  A    = CURRENT baseline (momentum + confirmation + fixed SL)`);
+  console.log(`  ORB  = Fade + structure stop + ₹80 risk + target: opposite ORB boundary`);
+  console.log(`  1.5R = Fade + structure stop + ₹80 risk + target: 1.5× stop distance`);
+  console.log(`  2R   = Fade + structure stop + ₹80 risk + target: 2.0× stop distance`);
+  console.log(`${'═'.repeat(78)}\n`);
 
-  const allTradesA = [], allTradesB = [], symbolSummary = [];
+  const A = [], FO = [], F15 = [], F2 = [], symbolSummary = [];
   let fetched = 0, failed = 0;
 
   for (const sym of SYMBOLS) {
@@ -408,112 +671,93 @@ async function main() {
     // Small delay to stay well within Zerodha rate limits (3 req/sec)
     await new Promise(r => setTimeout(r, 400));
 
-    const tA = replayCandles(candles, sym, CFG_A);
-    const tB = replayCandles(candles, sym, CFG_B);
-    allTradesA.push(...tA);
-    allTradesB.push(...tB);
-    symbolSummary.push({
-      symbol:  sym,
-      candleCount: candles.length,
-      A: { trades: tA.length, winRate: tA.length > 0 ? +(tA.filter(t=>t.result==='WIN').length/tA.length*100).toFixed(1) : 0, pnl: +tA.reduce((s,t)=>s+t.profit,0).toFixed(2) },
-      B: { trades: tB.length, winRate: tB.length > 0 ? +(tB.filter(t=>t.result==='WIN').length/tB.length*100).toFixed(1) : 0, pnl: +tB.reduce((s,t)=>s+t.profit,0).toFixed(2) },
+    const a   = replayCandles(candles, sym, CFG_CURRENT).trades;  // identical real candles
+    const fo  = replayFade(candles, sym, CFG_FADE_ORB).trades;
+    const f15 = replayFade(candles, sym, CFG_FADE_15R).trades;
+    const f2  = replayFade(candles, sym, CFG_FADE_2R).trades;
+    A.push(...a); FO.push(...fo); F15.push(...f15); F2.push(...f2);
+    const pnl = arr => +arr.reduce((s,t)=>s+t.profit,0).toFixed(2);
+    symbolSummary.push({ symbol: sym,
+      A: pnl(a), ORB: pnl(fo), R15: pnl(f15), R2: pnl(f2),
     });
   }
 
-  const mA = metrics(allTradesA, DAYS);
-  const mB = metrics(allTradesB, DAYS);
+  const mA = metrics(A, DAYS), mFO = metrics(FO, DAYS), mF15 = metrics(F15, DAYS), mF2 = metrics(F2, DAYS);
 
-  const smA = symbolMetrics(allTradesA);
-  const smB = symbolMetrics(allTradesB);
+  // ─── 4-way comparison table ──────────────────────────────────────────────
+  console.log(`\n${'─'.repeat(78)}`);
+  console.log(`  ${'Metric'.padEnd(15)} ${'A:CURRENT'.padStart(12)} ${'FADE-ORB'.padStart(12)} ${'FADE-1.5R'.padStart(12)} ${'FADE-2R'.padStart(12)}`);
+  console.log(`${'─'.repeat(78)}`);
+  const row = (k, va, vb, vc, vd) =>
+    console.log(`  ${k.padEnd(15)} ${String(va).padStart(12)} ${String(vb).padStart(12)} ${String(vc).padStart(12)} ${String(vd).padStart(12)}`);
+  row('Total Trades',  mA.trades,       mFO.trades,       mF15.trades,       mF2.trades);
+  row('Win Rate %',    mA.winRate,      mFO.winRate,      mF15.winRate,      mF2.winRate);
+  row('Net P&L ₹',     mA.netPnL,       mFO.netPnL,       mF15.netPnL,       mF2.netPnL);
+  row('Profit Factor', mA.profitFactor, mFO.profitFactor, mF15.profitFactor, mF2.profitFactor);
+  row('Avg R:R',       mA.avgRR,        mFO.avgRR,        mF15.avgRR,        mF2.avgRR);
+  row('Max Drawdown',  mA.maxDrawdown,  mFO.maxDrawdown,  mF15.maxDrawdown,  mF2.maxDrawdown);
+  row('Avg Win ₹',     mA.avgWin,       mFO.avgWin,       mF15.avgWin,       mF2.avgWin);
+  row('Avg Loss ₹',    mA.avgLoss,      mFO.avgLoss,      mF15.avgLoss,      mF2.avgLoss);
+  row('SL Hits',       mA.slHits,       mFO.slHits,       mF15.slHits,       mF2.slHits);
+  row('Target Hits',   mA.targetHits,   mFO.targetHits,   mF15.targetHits,   mF2.targetHits);
+  row('BUY WR %',      mA.buyWR,        mFO.buyWR,        mF15.buyWR,        mF2.buyWR);
+  row('SELL WR %',     mA.sellWR,       mFO.sellWR,       mF15.sellWR,       mF2.sellWR);
 
-  // ─── Print comparison ───────────────────────────────────────────────────────
-
-  console.log(`\n${'─'.repeat(70)}`);
-  console.log(`  PORTFOLIO SUMMARY  |  A=Original  B=Current (all fixes)`);
-  console.log(`${'─'.repeat(70)}`);
-  const f = (k, va, vb, better='higher') => {
-    const up = better === 'higher' ? vb > va : vb < va;
-    const arrow = up ? '▲' : va === vb ? '=' : '▼';
-    console.log(`  ${k.padEnd(22)} A: ${String(va).padStart(8)}    B: ${String(vb).padStart(8)}  ${arrow}`);
-  };
-  f('Total trades',    mA.trades,       mB.trades);
-  f('Win rate %',      mA.winRate,      mB.winRate);
-  f('Net P&L ₹',       mA.netPnL,       mB.netPnL);
-  f('Profit factor',   mA.profitFactor, mB.profitFactor);
-  f('Avg R:R',         mA.avgRR,        mB.avgRR);
-  f('Max drawdown ₹',  mA.maxDrawdown,  mB.maxDrawdown, 'higher');
-  f('Trades/day',      mA.tradesPerDay, mB.tradesPerDay);
-  f('BUYs',           mA.buys,         mB.buys);
-  f('BUY win rate %',  mA.buyWR,        mB.buyWR);
-  f('SELLs',          mA.sells,        mB.sells);
-  f('SELL win rate %', mA.sellWR,       mB.sellWR);
-
-  console.log(`\n${'─'.repeat(70)}`);
-  console.log(`  PER-SYMBOL BREAKDOWN`);
-  console.log(`${'─'.repeat(70)}`);
-  console.log(`  ${'Symbol'.padEnd(13)} ${'A-Tr'.padStart(5)} ${'A-WR%'.padStart(6)} ${'A-PnL'.padStart(8)}  |  ${'B-Tr'.padStart(5)} ${'B-WR%'.padStart(6)} ${'B-PnL'.padStart(8)}`);
+  // ─── Per-symbol net P&L ─────────────────────────────────────────────────────
+  console.log(`\n${'─'.repeat(78)}`);
+  console.log(`  PER-SYMBOL NET P&L`);
+  console.log(`${'─'.repeat(78)}`);
+  console.log(`  ${'Symbol'.padEnd(13)} ${'CURRENT'.padStart(10)} ${'FADE-ORB'.padStart(10)} ${'FADE1.5R'.padStart(10)} ${'FADE-2R'.padStart(10)}`);
   for (const s of symbolSummary) {
-    console.log(`  ${s.symbol.padEnd(13)} ${String(s.A.trades).padStart(5)} ${String(s.A.winRate).padStart(6)} ${String(s.A.pnl).padStart(8)}  |  ${String(s.B.trades).padStart(5)} ${String(s.B.winRate).padStart(6)} ${String(s.B.pnl).padStart(8)}`);
+    console.log(`  ${s.symbol.padEnd(13)} ${String(s.A).padStart(10)} ${String(s.ORB).padStart(10)} ${String(s.R15).padStart(10)} ${String(s.R2).padStart(10)}`);
   }
 
-  console.log(`\n${'─'.repeat(70)}`);
-  console.log(`  TOP 5 SYMBOLS (B — Current Strategy, by P&L)`);
-  console.log(`${'─'.repeat(70)}`);
-  smB.slice(0, 5).forEach(s => console.log(`  ${s.symbol.padEnd(13)} ${s.trades} trades  WR ${s.winRate}%  P&L ₹${s.netPnL}`));
-
-  console.log(`\n  WORST 5 SYMBOLS (B — Current Strategy, by P&L)`);
-  smB.slice(-5).reverse().forEach(s => console.log(`  ${s.symbol.padEnd(13)} ${s.trades} trades  WR ${s.winRate}%  P&L ₹${s.netPnL}`));
-
-  const tradingDaysActual = new Set(allTradesB.map(t => t.entryTime.slice(0, 10))).size;
-  const dailyPnL = tradingDaysActual > 0 ? +(mB.netPnL / tradingDaysActual).toFixed(2) : 0;
-
-  console.log(`\n${'─'.repeat(70)}`);
-  console.log(`  VERDICT (Strategy B — Current)`);
-  console.log(`${'─'.repeat(70)}`);
-  console.log(`  Trading days with signals:  ${tradingDaysActual}`);
-  console.log(`  Avg P&L per signal day:     ₹${dailyPnL}`);
-  console.log(`  Capital:                    ₹20,000`);
-  const targetMet = dailyPnL >= 100;
-  console.log(`  ₹100–₹200/day target:       ${targetMet ? '✓ MET' : '✗ NOT MET'}`);
-  console.log(`  Profitable overall:         ${mB.netPnL > 0 ? '✓ YES' : '✗ NO'}`);
-  console.log(`  Profit factor > 1.0:        ${mB.profitFactor > 1 ? `✓ YES (${mB.profitFactor})` : `✗ NO (${mB.profitFactor})`}`);
-
-  if (mB.netPnL <= 0 || mB.profitFactor <= 1) {
-    console.log(`\n  ⚠️  NOT PROFITABLE. Identifying largest weakness...`);
-    const buyPnL  = allTradesB.filter(t=>t.action==='BUY') .reduce((s,t)=>s+t.profit,0);
-    const sellPnL = allTradesB.filter(t=>t.action==='SELL').reduce((s,t)=>s+t.profit,0);
-    console.log(`  BUY  total P&L:  ₹${buyPnL.toFixed(2)}`);
-    console.log(`  SELL total P&L:  ₹${sellPnL.toFixed(2)}`);
-    const slHits = allTradesB.filter(t=>t.result==='LOSS').length;
-    const tgtHits = allTradesB.filter(t=>t.result==='WIN').length;
-    console.log(`  SL hits / target hits: ${slHits} / ${tgtHits}`);
-    const avgLoss = allTradesB.filter(t=>t.result==='LOSS').reduce((s,t)=>s+t.profit,0) / (slHits||1);
-    const avgWin  = allTradesB.filter(t=>t.result==='WIN') .reduce((s,t)=>s+t.profit,0) / (tgtHits||1);
-    console.log(`  Avg WIN: ₹${avgWin.toFixed(2)}  Avg LOSS: ₹${avgLoss.toFixed(2)}`);
+  // ─── Verdict ────────────────────────────────────────────────────────────────
+  const variants = [
+    { name: 'A:CURRENT',  m: mA },
+    { name: 'FADE-ORB',   m: mFO },
+    { name: 'FADE-1.5R',  m: mF15 },
+    { name: 'FADE-2R',    m: mF2 },
+  ];
+  const winner = variants.slice().sort((x, y) => y.m.netPnL - x.m.netPnL)[0];
+  console.log(`\n${'─'.repeat(78)}`);
+  console.log(`  VERDICT`);
+  console.log(`${'─'.repeat(78)}`);
+  for (const v of variants) {
+    const ok = v.m.netPnL > 0 && v.m.profitFactor > 1;
+    const dailyPnL = v.m.trades > 0 ? +(v.m.netPnL / Math.max(DAYS*5/7,1)).toFixed(1) : 0;
+    console.log(`  ${v.name.padEnd(12)} NetP&L ₹${String(v.m.netPnL).padStart(9)}  PF ${String(v.m.profitFactor).padStart(5)}  WR ${String(v.m.winRate).padStart(5)}%  ~₹${String(dailyPnL).padStart(6)}/day  ${ok ? '✓ PROFITABLE' : '✗'}`);
+  }
+  console.log(`\n  Best by Net P&L: ${winner.name} (₹${winner.m.netPnL}, PF ${winner.m.profitFactor})`);
+  if (winner.m.netPnL > 0 && winner.m.profitFactor > 1) {
+    console.log(`  → ${winner.name} shows positive expectancy. Recommend 120-day robustness check, then paper validation before any live change.`);
+  } else {
+    console.log(`  → Still no profitable variant. The fade direction has WR edge but R:R cannot overcome costs+losses here.`);
   }
 
-  // ─── Persist to data/backtest-results.json ───────────────────────────────────
+  // ─── Persist ────────────────────────────────────────────────────────────────
   let existing = {};
   if (fs.existsSync(RESULTS_PATH)) {
     try { existing = JSON.parse(fs.readFileSync(RESULTS_PATH, 'utf8')); } catch {}
   }
-  const runId = `comparison_${fromStr}_${toStr}_${Date.now()}`;
+  const runId = `fade_combo_${fromStr}_${toStr}_${Date.now()}`;
   existing[runId] = {
     runAt: new Date().toISOString(),
-    type: 'A_B_comparison',
+    type: 'fade_combo_target_test',
     fromDate: fromStr, toDate: toStr, days: DAYS,
     symbols: SYMBOLS, fetched, failed,
-    A: { config: { MIN_CONFIDENCE: CFG_A.MIN_CONFIDENCE, ORB_MIN_RANGE_PCT: CFG_A.ORB_MIN_RANGE_PCT, BULL_MARKET_THRESHOLD: CFG_A.BULL_MARKET_THRESHOLD }, ...mA },
-    B: { config: { MIN_CONFIDENCE: CFG_B.MIN_CONFIDENCE, ORB_MIN_RANGE_PCT: CFG_B.ORB_MIN_RANGE_PCT, BULL_MARKET_THRESHOLD: CFG_B.BULL_MARKET_THRESHOLD }, ...mB },
+    current:  { label: 'momentum baseline',          ...mA },
+    fadeORB:  { label: 'fade + opposite-ORB target', ...mFO },
+    fade15R:  { label: 'fade + 1.5R target',         ...mF15 },
+    fade2R:   { label: 'fade + 2R target',           ...mF2 },
     symbolSummary,
-    topSymbols:   smB.slice(0, 5),
-    worstSymbols: smB.slice(-5).reverse(),
+    winner: winner.name,
   };
   const keys = Object.keys(existing);
   if (keys.length > 50) keys.sort().slice(0, keys.length - 50).forEach(k => delete existing[k]);
   fs.writeFileSync(RESULTS_PATH, JSON.stringify(existing, null, 2));
   console.log(`\n  Results saved → data/backtest-results.json (runId: ${runId})`);
-  console.log(`${'═'.repeat(70)}\n`);
+  console.log(`${'═'.repeat(78)}\n`);
 }
 
 main().catch(err => {

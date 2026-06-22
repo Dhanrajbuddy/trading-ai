@@ -122,8 +122,9 @@ function update15MinCandle(symbol, price, volume, source) {
       if (orb && !orb.established) {
         orb.high = Math.max(orb.high, state.high);
         orb.low  = Math.min(orb.low,  state.low);
-        const todayCount = _candle15History[symbol].length;
-        if (todayCount >= ORB_CANDLES) {
+        // Use orbCandleCount (resets each day) not history.length (spans days)
+        orb.candleCount = (orb.candleCount || 0) + 1;
+        if (orb.candleCount >= ORB_CANDLES) {
           const orbRange = orb.high - orb.low;
           const orbRangePct = (orbRange / state.close) * 100;
           // Sanity guard: NSE large-cap 30-min ORB is always 0.1–5%. Anything larger
@@ -168,11 +169,15 @@ function resetDayState(symbol, currentSource) {
   if (srcChange) {
     console.log(`[SignalEngine] ⚠️  ${symbol} data source changed ${orb.source} → ${currentSource} — ORB reset`);
     log('INFO', `ORB reset: data source changed for ${symbol}`, { from: orb.source, to: currentSource });
+    // On source change (mock → live) wipe history — mock prices corrupt RSI
+    _candle15History[symbol] = [];
   }
-
-  _candle15History[symbol] = [];
+  // NOTE: On a plain new-day reset we intentionally keep _candle15History so that
+  // RSI is seeded from yesterday's closed candles and available from 9:30 AM onward.
+  // Without this, RSI is null until ~12:45 PM (needs 14 closed today-candles) and
+  // the entire morning breakout window produces zero signals.
   _candle15State[symbol]   = null;
-  _orbState[symbol]        = { high: -Infinity, low: Infinity, established: false, day: today, source: currentSource };
+  _orbState[symbol]        = { high: -Infinity, low: Infinity, established: false, day: today, source: currentSource, candleCount: 0 };
   _vwapState[symbol]       = { accum: 0, vol: 0, day: today };
   if (newDay) console.log(`[SignalEngine] 🔄 ${symbol} day state reset for ${today}`);
 }
@@ -341,7 +346,7 @@ function generateSignals(stocks, scanData) {
     // Wait for ORB to be established (first 2 × 15-min candles completed)
     const orb = _orbState[sym];
     if (!orb || !orb.established) {
-      const candleCount = (_candle15History[sym] || []).length;
+      const candleCount = orb ? (orb.candleCount || 0) : 0;
       if (candleCount % 1 === 0) {
         console.log(`[SignalEngine] ⏳ ${sym} ORB pending — ${candleCount}/${ORB_CANDLES} candles built`);
       }
@@ -491,6 +496,48 @@ function generateSignals(stocks, scanData) {
 
 
 /**
+ * Seed 15-min candle history from externally-fetched candles (called on startup
+ * after any restart so RSI and ORB are ready before the first pipeline tick).
+ *
+ * @param {string} symbol
+ * @param {Array<{ts:string, open, high, low, close, volume}>} candles
+ *   Historical 15-min candles, newest last. ts must be IST ISO string
+ *   (e.g. "2026-06-23T09:15:00+0530") so today-filtering works correctly.
+ */
+function seedCandleHistory(symbol, candles) {
+  if (!candles || candles.length === 0) return;
+  const today = getTodayIST(); // "YYYY-MM-DD"
+
+  // Populate history (capped at 30) — strips ts before storing
+  _candle15History[symbol] = candles
+    .map(c => ({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume }))
+    .slice(-30);
+
+  // Seed ORB from today's first ORB_CANDLES candles so we don't wait 30 min
+  const todayCandles = candles.filter(c => c.ts && String(c.ts).startsWith(today));
+  if (todayCandles.length >= ORB_CANDLES) {
+    const orbCans  = todayCandles.slice(0, ORB_CANDLES);
+    const orbHigh  = Math.max(...orbCans.map(c => c.high));
+    const orbLow   = Math.min(...orbCans.map(c => c.low));
+    const midClose = orbCans[ORB_CANDLES - 1].close;
+    const rangePct = ((orbHigh - orbLow) / midClose) * 100;
+    if (rangePct >= ORB_MIN_RANGE_PCT && rangePct <= 5.0) {
+      _orbState[symbol] = {
+        high: orbHigh, low: orbLow, established: true,
+        day: today, source: 'zerodha', candleCount: ORB_CANDLES,
+      };
+      console.log(`[SignalEngine] 🌱 ${symbol} ORB seeded — High=₹${orbHigh.toFixed(2)} Low=₹${orbLow.toFixed(2)} Range=${rangePct.toFixed(2)}%`);
+    } else {
+      // Range too narrow or implausible — mark today as started so live candles rebuild
+      _orbState[symbol] = {
+        high: -Infinity, low: Infinity, established: false,
+        day: today, source: 'zerodha', candleCount: 0,
+      };
+    }
+  }
+}
+
+/**
  * Reset per-symbol cooldown timestamps so the first signal of a new trading
  * day is never blocked by yesterday's cooldown window.
  * Called by index.js daily reset scheduler (after 3:30 PM IST).
@@ -502,4 +549,4 @@ function resetForNewDay() {
   console.log('[SignalEngine] 🔄 Daily reset — cooldown timestamps cleared.');
 }
 
-module.exports = { generateSignals, resetForNewDay };
+module.exports = { generateSignals, resetForNewDay, seedCandleHistory };

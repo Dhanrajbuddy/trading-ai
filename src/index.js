@@ -1,6 +1,6 @@
 'use strict';
 
-require('dotenv').config();
+require('dotenv').config({ override: true });
 
 // ─── Pipe console.log / console.error into the in-memory debug log ────────────
 // Must run before any other require so all modules benefit automatically.
@@ -31,6 +31,7 @@ const { generateAccessToken } = require('./services/zerodhaAuth');
 const { placeOrder, getDailyState, getOrderLog, monitorOrders, getOcoTrades } = require('./services/orderService');
 const { runScanners }         = require('./scanners/marketScanner');
 const { generateSignals, resetForNewDay } = require('./strategies/signalEngine');
+const { seedRSIHistory }                  = require('./utils/seedRSI');
 const { analyzeSignal }       = require('./services/aiAnalyzer');
 const { trackSignal, updatePrices, getPortfolioStats } = require('./services/signalTracker');
 const { sendAlert, sendMarketAlert }   = require('./alerts/telegramAlert');
@@ -446,8 +447,11 @@ app.get('/zerodha/callback', async (req, res) => {
 
     console.log(`[ZerodhaAuth] Login successful. Access token acquired.`);
 
-    // Trigger immediate pipeline run using real Kite data
-    runPipeline().catch((err) => console.error(`[Callback] Pipeline: ${err.message}`));
+    // Re-seed candle history with the fresh token, then trigger a pipeline run
+    const { INSTRUMENT_TOKENS: _tokens } = require('./backtest/backtestEngine');
+    seedRSIHistory(Object.keys(_tokens))
+      .catch((e) => console.error(`[Callback] seedRSI failed: ${e.message}`))
+      .finally(() => runPipeline().catch((err) => console.error(`[Callback] Pipeline: ${err.message}`)));
 
     res.send(`
       <!DOCTYPE html>
@@ -520,7 +524,13 @@ cron.schedule('*/5 * * * * *', async () => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`[Server] Algorithmic Trading AI v2.0 started on port ${PORT}`);
+  // Seed candle history so RSI and ORB are available before the first scan cycle.
+  // Uses the universe's full token list; best-effort — failures are non-fatal.
+  const { INSTRUMENT_TOKENS } = require('./backtest/backtestEngine');
+  await seedRSIHistory(Object.keys(INSTRUMENT_TOKENS)).catch((e) =>
+    console.error(`[Startup] seedRSI failed: ${e.message}`)
+  );
   runPipeline().catch((err) => console.error(`[Startup] ${err.message}`));
 });

@@ -405,6 +405,132 @@
       "signalAt": "2026-06-12T04:53:41.051Z",
       "resolvedAt": "2026-06-12T09:45:00.705Z",
       "date": "2026-06-12"
+    },
+    {
+      "symbol": "COALINDIA",
+      "action": "BUY",
+      "entry": 456.6,
+      "exit": 455.9,
+      "stopLoss": 454.32,
+      "target": 463.3,
+      "positionSize": 35,
+      "result": "EXPIRED",
+      "pnl": -24.5,
+      "signalAt": "2026-06-17T08:45:05.359Z",
+      "resolvedAt": "2026-06-17T09:45:00.802Z",
+      "date": "2026-06-17"
+    },
+    {
+      "symbol": "SHRIRAMFIN",
+      "action": "SELL",
+      "entry": 1007.5,
+      "exit": 1008,
+      "stopLoss": 1012.54,
+      "target": 997.42,
+      "positionSize": 15,
+      "result": "EXPIRED",
+      "pnl": -7.5,
+      "signalAt": "2026-06-17T08:45:35.400Z",
+      "resolvedAt": "2026-06-17T09:45:00.810Z",
+      "date": "2026-06-17"
+    },
+    {
+      "symbol": "BPCL",
+      "action": "SELL",
+      "entry": 316.8,
+      "exit": 318,
+      "stopLoss": 318.38,
+      "target": 313.63,
+      "positionSize": 50,
+      "result": "EXPIRED",
+      "pnl": -60,
+      "signalAt": "2026-06-17T08:45:35.400Z",
+      "resolvedAt": "2026-06-17T09:45:00.810Z",
+      "date": "2026-06-17"
+    },
+    {
+      "symbol": "HDFCBANK",
+      "action": "SELL",
+      "entry": 794.1,
+      "exit": 798.07,
+      "stopLoss": 798.07,
+      "target": 786.16,
+      "positionSize": 20,
+      "result": "LOSS",
+      "pnl": -79.4,
+      "signalAt": "2026-06-18T09:00:45.809Z",
+      "resolvedAt": "2026-06-18T09:36:10.202Z",
+      "date": "2026-06-18"
+    },
+    {
+      "symbol": "EICHERMOT",
+      "action": "SELL",
+      "entry": 7590.5,
+      "exit": 7608.5,
+      "stopLoss": 7628.45,
+      "target": 7514.6,
+      "positionSize": 2,
+      "result": "EXPIRED",
+      "pnl": -36,
+      "signalAt": "2026-06-18T09:00:10.788Z",
+      "resolvedAt": "2026-06-18T09:45:01.048Z",
+      "date": "2026-06-18"
+    },
+    {
+      "symbol": "BPCL",
+      "action": "SELL",
+      "entry": 315.55,
+      "exit": 316.5,
+      "stopLoss": 317.13,
+      "target": 312.39,
+      "positionSize": 50,
+      "result": "EXPIRED",
+      "pnl": -47.5,
+      "signalAt": "2026-06-18T09:00:15.701Z",
+      "resolvedAt": "2026-06-18T09:45:01.048Z",
+      "date": "2026-06-18"
+    },
+    {
+      "symbol": "HINDALCO",
+      "action": "BUY",
+      "entry": 1009.5,
+      "exit": 1004.45,
+      "stopLoss": 1004.45,
+      "target": 1019.6,
+      "positionSize": 15,
+      "result": "LOSS",
+      "pnl": -75.75,
+      "signalAt": "2026-06-19T07:30:15.687Z",
+      "resolvedAt": "2026-06-19T09:23:35.912Z",
+      "date": "2026-06-19"
+    },
+    {
+      "symbol": "HINDUNILVR",
+      "action": "SELL",
+      "entry": 2186.7,
+      "exit": 2194.7,
+      "stopLoss": 2197.63,
+      "target": 2164.83,
+      "positionSize": 7,
+      "result": "EXPIRED",
+      "pnl": -56,
+      "signalAt": "2026-06-19T07:30:05.598Z",
+      "resolvedAt": "2026-06-19T09:45:00.369Z",
+      "date": "2026-06-19"
+    },
+    {
+      "symbol": "ULTRACEMCO",
+      "action": "SELL",
+      "entry": 11335,
+      "exit": 11373,
+      "stopLoss": 11391.67,
+      "target": 11179,
+      "positionSize": 1,
+      "result": "EXPIRED",
+      "pnl": -38,
+      "signalAt": "2026-06-19T07:30:15.687Z",
+      "resolvedAt": "2026-06-19T09:45:00.370Z",
+      "date": "2026-06-19"
     }
   ],
   "symbolStats": {
@@ -459,14 +585,14 @@
     "COALINDIA": {
       "wins": 1,
       "losses": 0,
-      "expired": 0,
-      "totalPnl": 157.08
+      "expired": 1,
+      "totalPnl": 132.58
     },
     "BPCL": {
       "wins": 0,
       "losses": 1,
-      "expired": 0,
-      "totalPnl": -79.92
+      "expired": 2,
+      "totalPnl": -187.42000000000002
     },
     "ITC": {
       "wins": 0,
@@ -519,8 +645,8 @@
     "EICHERMOT": {
       "wins": 0,
       "losses": 1,
-      "expired": 0,
-      "totalPnl": -72.48
+      "expired": 1,
+      "totalPnl": -108.48
     },
     "ADANIENT": {
       "wins": 0,
@@ -543,20 +669,38 @@
     "SHRIRAMFIN": {
       "wins": 0,
       "losses": 1,
-      "expired": 0,
-      "totalPnl": -79.74
+      "expired": 1,
+      "totalPnl": -87.24
     },
     "HINDUNILVR": {
       "wins": 0,
       "losses": 1,
-      "expired": 0,
-      "totalPnl": -75.18
+      "expired": 1,
+      "totalPnl": -131.18
     },
     "INFY": {
       "wins": 0,
       "losses": 0,
       "expired": 1,
       "totalPnl": -18.2
+    },
+    "HDFCBANK": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -79.4
+    },
+    "HINDALCO": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -75.75
+    },
+    "ULTRACEMCO": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": -38
     }
   }
 }
