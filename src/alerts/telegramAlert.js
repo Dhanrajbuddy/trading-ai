@@ -7,8 +7,13 @@
 
 const TelegramBot = require('node-telegram-bot-api');
 
+const { createSignalRecord, setChannelMessageId } = require('../telegram/signalStore');
+const { formatPreview } = require('../telegram/previewFormatter');
+
 let bot = null;
 let _marketClosedAlertSent = false;
+
+const PRICE_STARS = parseInt(process.env.TELEGRAM_SIGNAL_PRICE_STARS || '200', 10);
 
 /**
  * Format a Date (or timestamp ms) as a human-readable IST string.
@@ -65,7 +70,12 @@ function formatMessage(signal, analysis) {
 }
 
 /**
- * Send a trading signal alert to the configured Telegram chat
+ * Send a trading signal alert to the configured Telegram chat.
+ *
+ * Posts a PREVIEW (no entry/SL/target) with an inline "Unlock" button.
+ * The full signal is stored in signalStore and only delivered after
+ * a successful Telegram Stars payment.
+ *
  * @param {Object} signal
  * @param {Object} analysis
  * @returns {Promise<void>}
@@ -80,9 +90,30 @@ async function sendAlert(signal, analysis) {
   }
 
   try {
-    const text = formatMessage(signal, analysis);
-    await instance.sendMessage(chatId, text, { parse_mode: 'Markdown' });
-    console.log(`[Telegram] Alert sent for ${signal.symbol} (${signal.action})`);
+    // Create persistent signal record — stores full payload for later delivery
+    const signalId = createSignalRecord(signal, analysis, PRICE_STARS);
+
+    // Build safe preview (no entry/SL/target exposed)
+    const previewText = formatPreview(signal, analysis, PRICE_STARS);
+
+    // Inline keyboard with unlock button — callback_data only contains signal_id
+    const opts = {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [[
+          { text: `🔓 Unlock for ${PRICE_STARS} ⭐`, callback_data: `unlock_signal:${signalId}` },
+        ]],
+      },
+    };
+
+    const sent = await instance.sendMessage(chatId, previewText, opts);
+
+    // Store the channel message ID for reference
+    if (sent && sent.message_id) {
+      setChannelMessageId(signalId, sent.message_id);
+    }
+
+    console.log(`[Telegram] Preview posted for ${signal.symbol} (${signal.action}) — signal_id=${signalId}`);
   } catch (err) {
     console.error(`[Telegram] Failed to send alert: ${err.message}`);
   }

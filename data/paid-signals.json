@@ -1,0 +1,38 @@
+{
+  "signals": [
+    {
+      "signal_id": "ed031597-a7c4-4e0a-b2db-62f8f5ada153",
+      "symbol": "BHARTIARTL",
+      "action": "SELL",
+      "confidence": 88,
+      "created_at": "2026-09-07T06:40:07.625Z",
+      "price_stars": 200,
+      "channel_message_id": 2557,
+      "full_signal_payload": "{\"signal\":{\"symbol\":\"BHARTIARTL\",\"action\":\"SELL\",\"strength\":\"STRONG\",\"confidence\":88,\"price\":1838.8,\"changePercent\":-0.07,\"volume\":2739260,\"avgVolume\":1826173,\"volumeMultiplier\":1.5,\"vwap\":1841.03,\"rsi\":38.3,\"entry\":1838.8,\"stopLoss\":1847.99,\"slType\":\"fixed-0.5%\",\"target\":1811.8,\"targetPct\":1.47,\"orbHigh\":1855.5,\"orbLow\":1842,\"orbRange\":13.5,\"qty\":8,\"positionSize\":8,\"positionValue\":14710.4,\"capitalDeployed\":14710.4,\"riskAmount\":73.52,\"expectedProfit\":216,\"expectedCost\":44.34,\"reasons\":[\"ORB breakdown below range + buffer\",\"RSI 38.3 — strong momentum\",\"Volume 1.5x — spike confirmed\",\"Price below VWAP ₹1841.03\"],\"marketBreadth\":40,\"marketTrend\":\"NEUTRAL\",\"source\":\"zerodha\",\"timestamp\":\"2026-09-07T06:40:05.548Z\",\"confirmed\":true},\"analysis\":{\"signal\":\"SELL\",\"confidence\":58,\"reason\":\"Symbol history: baseline (0 trades observed, need 5+ decided); ORB quality: ORB score 60/100; Volume: volume 1.5x average; Timing: good window 11:00–12:30\",\"breakdown\":{\"winRatePts\":22,\"orbPts\":18,\"volumePts\":8,\"timePts\":10,\"driftPenalty\":0},\"source\":\"factor-model\"}}",
+      "payment_status": "pending"
+    },
+    {
+      "signal_id": "933d6584-61cf-4c7d-8038-7829486e9176",
+      "symbol": "GRASIM",
+      "action": "BUY",
+      "confidence": 85,
+      "created_at": "2026-09-07T06:40:46.064Z",
+      "price_stars": 200,
+      "channel_message_id": 2559,
+      "full_signal_payload": "{\"signal\":{\"symbol\":\"GRASIM\",\"action\":\"BUY\",\"strength\":\"STRONG\",\"confidence\":85,\"price\":3326.6,\"changePercent\":0.14,\"volume\":176203,\"avgVolume\":66492,\"volumeMultiplier\":2.65,\"vwap\":3311.24,\"rsi\":56.6,\"entry\":3326.6,\"stopLoss\":3309.97,\"slType\":\"fixed-0.5%\",\"target\":3375.4,\"targetPct\":1.47,\"orbHigh\":3322,\"orbLow\":3297.6,\"orbRange\":24.4,\"qty\":4,\"positionSize\":4,\"positionValue\":13306.4,\"capitalDeployed\":13306.4,\"riskAmount\":66.52,\"expectedProfit\":195.2,\"expectedCost\":40.7,\"reasons\":[\"ORB breakout above range + buffer\",\"RSI 56.6 — moderate momentum\",\"Volume 2.6x — strong\",\"Price above VWAP ₹3311.24\"],\"marketBreadth\":40,\"marketTrend\":\"NEUTRAL\",\"source\":\"zerodha\",\"timestamp\":\"2026-09-07T06:40:45.301Z\",\"confirmed\":true},\"analysis\":{\"signal\":\"BUY\",\"confidence\":63,\"reason\":\"Symbol history: baseline (1 trades observed, need 5+ decided); ORB quality: ORB score 60/100; Volume: volume 2.6x average; Timing: good window 11:00–12:30\",\"breakdown\":{\"winRatePts\":22,\"orbPts\":18,\"volumePts\":13,\"timePts\":10,\"driftPenalty\":0},\"source\":\"factor-model\"}}",
+      "payment_status": "pending"
+    },
+    {
+      "signal_id": "5029ebd1-0cd1-4687-a9db-0a8f8d6cede7",
+      "symbol": "POWERGRID",
+      "action": "BUY",
+      "confidence": 78,
+      "created_at": "2026-09-07T06:45:21.635Z",
+      "price_stars": 200,
+      "channel_message_id": 2563,
+      "full_signal_payload": "{\"signal\":{\"symbol\":\"POWERGRID\",\"action\":\"BUY\",\"strength\":\"MEDIUM\",\"confidence\":78,\"price\":267.45,\"changePercent\":0.55,\"volume\":2362485,\"avgVolume\":1283959,\"volumeMultiplier\":1.84,\"vwap\":267,\"rsi\":58,\"entry\":267.45,\"stopLoss\":266.11,\"slType\":\"fixed-0.5%\",\"target\":271.85,\"targetPct\":1.65,\"orbHigh\":266.45,\"orbLow\":264.25,\"orbRange\":2.2,\"qty\":59,\"positionSize\":59,\"positionValue\":15779.55,\"capitalDeployed\":15779.55,\"riskAmount\":79.06,\"expectedProfit\":259.6,\"expectedCost\":48.31,\"reasons\":[\"ORB breakout above range + buffer\",\"RSI 58 — moderate momentum\",\"Volume 1.8x — spike confirmed\",\"Price above VWAP ₹267.00\"],\"marketBreadth\":40,\"marketTrend\":\"NEUTRAL\",\"source\":\"zerodha\",\"timestamp\":\"2026-09-07T06:45:20.685Z\",\"confirmed\":true},\"analysis\":{\"signal\":\"BUY\",\"confidence\":58,\"reason\":\"Symbol history: baseline (1 trades observed, need 5+ decided); ORB quality: ORB score 60/100; Volume: volume 1.8x average; Timing: good window 11:00–12:30\",\"breakdown\":{\"winRatePts\":22,\"orbPts\":18,\"volumePts\":8,\"timePts\":10,\"driftPenalty\":0},\"source\":\"factor-model\"}}",
+      "payment_status": "pending"
+    }
+  ],
+  "payments": []
+}

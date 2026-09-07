@@ -32,6 +32,7 @@ const { placeOrder, getDailyState, getOrderLog, monitorOrders, getOcoTrades } = 
 const { runScanners }         = require('./scanners/marketScanner');
 const { generateSignals, resetForNewDay } = require('./strategies/signalEngine');
 const { seedRSIHistory }                  = require('./utils/seedRSI');
+const { startBot }                        = require('./telegram/bot');
 const { analyzeSignal }       = require('./services/aiAnalyzer');
 const { trackSignal, updatePrices, getPortfolioStats } = require('./services/signalTracker');
 const { sendAlert, sendMarketAlert }   = require('./alerts/telegramAlert');
@@ -526,6 +527,10 @@ cron.schedule('*/5 * * * * *', async () => {
 
 app.listen(PORT, async () => {
   console.log(`[Server] Algorithmic Trading AI v2.0 started on port ${PORT}`);
+
+  // Start Telegram bot with polling for payment/unlock handlers
+  startBot();
+
   // Seed candle history so RSI and ORB are available before the first scan cycle.
   // Uses the universe's full token list; best-effort — failures are non-fatal.
   const { INSTRUMENT_TOKENS } = require('./backtest/backtestEngine');

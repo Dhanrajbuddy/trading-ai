@@ -531,6 +531,188 @@
       "signalAt": "2026-06-19T07:30:15.687Z",
       "resolvedAt": "2026-06-19T09:45:00.370Z",
       "date": "2026-06-19"
+    },
+    {
+      "symbol": "BAJAJFINSV",
+      "action": "BUY",
+      "entry": 1784.4,
+      "exit": 1783.5,
+      "stopLoss": 1775.48,
+      "target": 1813,
+      "positionSize": 8,
+      "result": "EXPIRED",
+      "pnl": -7.2,
+      "signalAt": "2026-06-22T08:07:00.090Z",
+      "resolvedAt": "2026-06-22T09:45:00.783Z",
+      "date": "2026-06-22"
+    },
+    {
+      "symbol": "JSWSTEEL",
+      "action": "SELL",
+      "entry": 1281.8,
+      "exit": 1284.2,
+      "stopLoss": 1288.21,
+      "target": 1266.8,
+      "positionSize": 12,
+      "result": "EXPIRED",
+      "pnl": -28.8,
+      "signalAt": "2026-06-22T08:07:30.102Z",
+      "resolvedAt": "2026-06-22T09:45:00.802Z",
+      "date": "2026-06-22"
+    },
+    {
+      "symbol": "TITAN",
+      "action": "SELL",
+      "entry": 4372.9,
+      "exit": 4376.6,
+      "stopLoss": 4394.76,
+      "target": 4319.1,
+      "positionSize": 3,
+      "result": "EXPIRED",
+      "pnl": -11.1,
+      "signalAt": "2026-06-22T08:07:50.166Z",
+      "resolvedAt": "2026-06-22T09:45:00.804Z",
+      "date": "2026-06-22"
+    },
+    {
+      "symbol": "TITAN",
+      "action": "BUY",
+      "entry": 4409.1,
+      "exit": 4387.05,
+      "stopLoss": 4387.05,
+      "target": 4472.9,
+      "positionSize": 3,
+      "result": "LOSS",
+      "pnl": -66.15,
+      "signalAt": "2026-06-23T04:50:55.766Z",
+      "resolvedAt": "2026-06-23T05:03:15.854Z",
+      "date": "2026-06-23"
+    },
+    {
+      "symbol": "ADANIPORTS",
+      "action": "SELL",
+      "entry": 1826.9,
+      "exit": 1805.1,
+      "stopLoss": 1836.03,
+      "target": 1805.1,
+      "positionSize": 8,
+      "result": "WIN",
+      "pnl": 174.4,
+      "signalAt": "2026-06-23T04:51:05.783Z",
+      "resolvedAt": "2026-06-23T06:11:26.349Z",
+      "date": "2026-06-23"
+    },
+    {
+      "symbol": "ASIANPAINT",
+      "action": "BUY",
+      "entry": 2683.4,
+      "exit": 2669.98,
+      "stopLoss": 2669.98,
+      "target": 2723,
+      "positionSize": 5,
+      "result": "LOSS",
+      "pnl": -67.1,
+      "signalAt": "2026-06-23T04:51:05.783Z",
+      "resolvedAt": "2026-06-23T06:37:20.170Z",
+      "date": "2026-06-23"
+    },
+    {
+      "symbol": "APOLLOHOSP",
+      "action": "SELL",
+      "entry": 8505,
+      "exit": 8491.5,
+      "stopLoss": 8547.52,
+      "target": 8419.95,
+      "positionSize": 1,
+      "result": "EXPIRED",
+      "pnl": 13.5,
+      "signalAt": "2026-06-23T08:30:56.124Z",
+      "resolvedAt": "2026-06-23T09:45:01.003Z",
+      "date": "2026-06-23"
+    },
+    {
+      "symbol": "HINDALCO",
+      "action": "BUY",
+      "entry": 986.1,
+      "exit": 981.17,
+      "stopLoss": 981.17,
+      "target": 1003.1,
+      "positionSize": 16,
+      "result": "LOSS",
+      "pnl": -78.88,
+      "signalAt": "2026-06-24T06:15:55.504Z",
+      "resolvedAt": "2026-06-24T07:07:31.045Z",
+      "date": "2026-06-24"
+    },
+    {
+      "symbol": "HDFCBANK",
+      "action": "BUY",
+      "entry": 791.7,
+      "exit": 792.45,
+      "stopLoss": 787.74,
+      "target": 807.6,
+      "positionSize": 20,
+      "result": "EXPIRED",
+      "pnl": 15,
+      "signalAt": "2026-06-24T06:15:55.504Z",
+      "resolvedAt": "2026-06-24T09:45:00.248Z",
+      "date": "2026-06-24"
+    },
+    {
+      "symbol": "BAJAJFINSV",
+      "action": "BUY",
+      "entry": 1781.5,
+      "exit": 1779.3,
+      "stopLoss": 1772.59,
+      "target": 1804.3,
+      "positionSize": 8,
+      "result": "EXPIRED",
+      "pnl": -17.6,
+      "signalAt": "2026-06-24T06:15:55.504Z",
+      "resolvedAt": "2026-06-24T09:45:00.256Z",
+      "date": "2026-06-24"
+    },
+    {
+      "symbol": "HCLTECH",
+      "action": "BUY",
+      "entry": 1122.8,
+      "exit": 1117.19,
+      "stopLoss": 1117.19,
+      "target": 1140.8,
+      "positionSize": 14,
+      "result": "LOSS",
+      "pnl": -78.54,
+      "signalAt": "2026-06-25T04:31:55.590Z",
+      "resolvedAt": "2026-06-25T07:01:40.318Z",
+      "date": "2026-06-25"
+    },
+    {
+      "symbol": "ITC",
+      "action": "BUY",
+      "entry": 291.6,
+      "exit": 290.14,
+      "stopLoss": 290.14,
+      "target": 295.3,
+      "positionSize": 54,
+      "result": "LOSS",
+      "pnl": -78.84,
+      "signalAt": "2026-06-25T04:30:50.533Z",
+      "resolvedAt": "2026-06-25T07:16:00.874Z",
+      "date": "2026-06-25"
+    },
+    {
+      "symbol": "INFY",
+      "action": "BUY",
+      "entry": 1052.6,
+      "exit": 1047.34,
+      "stopLoss": 1047.34,
+      "target": 1064,
+      "positionSize": 15,
+      "result": "LOSS",
+      "pnl": -78.9,
+      "signalAt": "2026-06-25T04:30:50.533Z",
+      "resolvedAt": "2026-06-25T07:30:15.218Z",
+      "date": "2026-06-25"
     }
   ],
   "symbolStats": {
@@ -596,15 +778,15 @@
     },
     "ITC": {
       "wins": 0,
-      "losses": 1,
+      "losses": 2,
       "expired": 0,
-      "totalPnl": -79.23
+      "totalPnl": -158.07
     },
     "ADANIPORTS": {
-      "wins": 0,
+      "wins": 1,
       "losses": 0,
       "expired": 1,
-      "totalPnl": 52
+      "totalPnl": 226.4
     },
     "MARUTI": {
       "wins": 0,
@@ -614,9 +796,9 @@
     },
     "TITAN": {
       "wins": 0,
-      "losses": 0,
-      "expired": 1,
-      "totalPnl": 4.5
+      "losses": 1,
+      "expired": 2,
+      "totalPnl": -72.75
     },
     "TATASTEEL": {
       "wins": 0,
@@ -626,9 +808,9 @@
     },
     "ASIANPAINT": {
       "wins": 0,
-      "losses": 0,
+      "losses": 1,
       "expired": 1,
-      "totalPnl": 63
+      "totalPnl": -4.099999999999994
     },
     "DRREDDY": {
       "wins": 0,
@@ -680,27 +862,51 @@
     },
     "INFY": {
       "wins": 0,
-      "losses": 0,
+      "losses": 1,
       "expired": 1,
-      "totalPnl": -18.2
+      "totalPnl": -97.10000000000001
     },
     "HDFCBANK": {
       "wins": 0,
       "losses": 1,
-      "expired": 0,
-      "totalPnl": -79.4
+      "expired": 1,
+      "totalPnl": -64.4
     },
     "HINDALCO": {
       "wins": 0,
-      "losses": 1,
+      "losses": 2,
       "expired": 0,
-      "totalPnl": -75.75
+      "totalPnl": -154.63
     },
     "ULTRACEMCO": {
       "wins": 0,
       "losses": 0,
       "expired": 1,
       "totalPnl": -38
+    },
+    "BAJAJFINSV": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 2,
+      "totalPnl": -24.8
+    },
+    "JSWSTEEL": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": -28.8
+    },
+    "APOLLOHOSP": {
+      "wins": 0,
+      "losses": 0,
+      "expired": 1,
+      "totalPnl": 13.5
+    },
+    "HCLTECH": {
+      "wins": 0,
+      "losses": 1,
+      "expired": 0,
+      "totalPnl": -78.54
     }
   }
 }
